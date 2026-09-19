@@ -1,0 +1,32 @@
+# ---------- 运行期数据（不入库） ----------
+data/
+!data/.gitkeep
+logs/
+accounts/
+.tray.lock
+
+# 会话与密钥（含登录态，严禁提交）
+storage_state.json
+secret.key
+login_qr.png
+ws_frames.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 便携运行库（体积大，不入库）
+.pylib/
+.browsers/
+python/
+
+# 导出/临时文件
+*.xlsx
+*.csv
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

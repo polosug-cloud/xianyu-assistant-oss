@@ -1,0 +1,6 @@
+fastapi>=0.115
+uvicorn>=0.30
+playwright>=1.40
+openpyxl>=3.1
+python-multipart>=0.0.9
+pydantic>=2.7

@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>闲鱼助手</title>
+<style>
+  body { font-family: system-ui, "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6f7; color: #333; }
+  header { background: #ff6a00; color: #fff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  main { max-width: 1100px; margin: 16px auto; padding: 0 12px; }
+  .card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .card h2 { font-size: 15px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
+  input, textarea, select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; margin: 2px; }
+  button { padding: 5px 12px; border: none; border-radius: 4px; background: #ff6a00; color: #fff; cursor: pointer; font-size: 13px; margin: 2px; }
+  button.gray { background: #888; }
+  button.red { background: #e74c3c; }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  pre { background: #fafafa; border: 1px solid #eee; padding: 8px; font-size: 12px; overflow: auto; max-height: 220px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #e6e6e6; }
+  .badge.on { background: #2ecc71; color: #fff; }
+  .badge.off { background: #e74c3c; color: #fff; }
+  .badge.warn { background: #f39c12; color: #fff; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .group { border: 1px solid #eee; border-radius: 6px; margin: 10px 0; padding: 10px; }
+  .group-title { font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .hint { font-size: 12px; color: #888; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #ddd; object-fit: cover; }
+  .avatar-fallback { width: 40px; height: 40px; border-radius: 50%; background: #ff6a00; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; }
+  .sw { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #555; margin-right: 10px; }
+  .sw input { margin: 0; }
+  #lastSelfcheck { white-space: pre-wrap; font-size: 12px; background: #fafafa; border: 1px solid #eee; padding: 8px; margin-top: 8px; }
+  /* ---- 悬浮聊天窗口（不随滚动，右下固定） ---- */
+  #chatFab { position: fixed; right: 22px; bottom: 22px; width: 54px; height: 54px; border-radius: 50%;
+    background: #ff6a00; color: #fff; font-size: 24px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 2px 12px rgba(0,0,0,.28); z-index: 900; border: none; padding: 0; }
+  #chatFabCnt { position: absolute; top: -4px; right: -4px; background: #e74c3c; color: #fff; border-radius: 9px;
+    font-size: 11px; min-width: 18px; height: 18px; line-height: 18px; text-align: center; padding: 0 4px; display: none; }
+  #chatPanel { position: fixed; right: 22px; bottom: 150px; width: 440px; height: 560px; max-height: calc(100vh - 190px);
+    background: #fff; border-radius: 10px; box-shadow: 0 4px 24px rgba(0,0,0,.28); z-index: 901; display: none;
+    flex-direction: column; overflow: hidden; border: 1px solid #eee; }
+  #chatPanel.open { display: flex; }
+  #chatHead { background: #ff6a00; color: #fff; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+  #chatBody { display: flex; flex: 1; min-height: 0; }
+  #convList { width: 148px; border-right: 1px solid #eee; overflow-y: auto; background: #fafafa; flex-shrink: 0; }
+  .conv-item { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 12px; word-break: break-all; }
+  .conv-item:hover { background: #fff4ea; }
+  .conv-item.active { background: #ffe2cc; }
+  .conv-item .cn { font-weight: 600; }
+  .conv-item .cp { color: #999; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-item .cu { display: inline-block; background: #e74c3c; color: #fff; border-radius: 8px; font-size: 10px; padding: 0 5px; margin-left: 4px; }
+  #msgBox { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #msgList { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; }
+  .msg { margin: 5px 0; max-width: 82%; padding: 7px 10px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .msg.in { background: #f0f0f0; align-self: flex-start; }
+  .msg.out { background: #cdeacd; align-self: flex-end; }
+  .msg .mt { font-size: 10px; color: #999; display: block; margin-top: 2px; text-align: right; }
+  #chatEmpty { color: #999; font-size: 12px; text-align: center; padding: 30px 10px; }
+  #chatSendRow { display: flex; gap: 6px; border-top: 1px solid #eee; padding: 6px; align-items: flex-end; }
+  #chatInput { flex: 1; resize: none; height: 54px; border: 1px solid #ddd; border-radius: 6px; padding: 6px; font-size: 13px; }
+  #ruleProdRows { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .rule-prod-row { display: inline-flex; gap: 4px; align-items: center; }
+  .ruleProdSel { width: 170px; }
+  .rule-prod-del { padding: 2px 8px; font-size: 12px; }
+  /* 通知框（带确定按钮，3秒自动关闭） */
+  #notifyMask { position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 1000;
+    display: none; align-items: center; justify-content: center; }
+  #notifyMask.show { display: flex; }
+  #notifyBox { background: #fff; border-radius: 10px; padding: 18px 22px; max-width: 420px;
+    width: 90%; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  #notifyText { font-size: 14px; color: #333; white-space: pre-wrap; line-height: 1.6; }
+  #notifyActions { text-align: right; margin-top: 12px; }
+  /* 通用模态（使用声明 / 捐赠与支持） */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.38); z-index: 1100;
+    display: none; align-items: center; justify-content: center; }
+  .modal-mask.show { display: flex; }
+  .modal-box { background: #fff; border-radius: 12px; padding: 22px 24px; max-width: 560px;
+    width: 92%; box-shadow: 0 8px 30px rgba(0,0,0,.3); max-height: 86vh; overflow: auto; }
+  .modal-box h3 { margin: 0 0 12px; font-size: 17px; color: #333; }
+  .modal-txt { font-size: 13.5px; line-height: 1.9; color: #444; }
+  .modal-txt b { color: #c0392b; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; align-items: center; }
+  #declareAgreeBox { margin-top: 12px; display: none; }
+  #declareAgreeBox input { width: 100%; box-sizing: border-box; }
+  /* 支持按钮（与聊天图标相邻、同尺寸同风格，位于其上） */
+  #supportFab { position: fixed; right: 22px; bottom: 86px; width: 54px; height: 54px; border-radius: 50%;
+    background: #e91e63; color: #fff; font-size: 24px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 2px 12px rgba(0,0,0,.28); z-index: 900; border: none; padding: 0; }
+  #supportFab:hover { background: #d81b60; }
+  #supportQr { max-width: 220px; max-height: 220px; display: block; margin: 12px auto; border: 1px dashed #ddd; padding: 6px; }
+  .qr-empty { text-align: center; color: #aaa; border: 1px dashed #ddd; padding: 26px; margin: 12px 0; font-size: 12px; }
+  .btn-declare { background: #e67e22; color: #fff; border: none; border-radius: 6px; padding: 6px 14px;
+    cursor: pointer; font-size: 13px; }
+  .btn-declare:hover { background: #d35400; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐟 闲鱼助手</h1>
+  <span id="conn" class="badge">连接中…</span>
+</header>
+<main>
+
+  <!-- 1. 运行状态 -->
+  <div class="card">
+    <h2>运行状态 <span style="flex:1"></span>
+      <button class="btn-declare" id="btnDeclare" title="查看软件使用声明">📜 使用声明</button>
+    </h2>
+    <div class="row">
+      <span id="avatarWrap"></span>
+      <span><b id="accountName">-</b></span>
+      <span>浏览器：<span id="browserStatus" class="badge">-</span></span>
+      <span>登录：<span id="loginStatus" class="badge">-</span></span>
+      <button id="btnLogin">登录/扫码</button>
+      <button id="btnSwitch" class="gray" style="display:none">切换账号</button>
+    </div>
+    <div id="loginMsg" class="hint" style="margin-top:6px;"></div>
+    <!-- 自检 + 提示音开关 -->
+    <div class="row" style="margin-top:10px; padding-top:8px; border-top:1px dashed #eee;">
+      <label class="sw" title="按间隔自动执行自检（先判在线，再虚拟演练各业务链路）">
+        <input type="checkbox" id="selfcheckEn"> 自检任务</label>
+      <span style="font-size:12px">间隔 <input type="number" id="selfcheckMin" min="1" value="60" style="width:56px"> 分钟</span>
+      <button id="btnSelfcheck" class="small">▶ 立即自检</button>
+      <span id="selfcheckBadge" class="badge" style="display:none"></span>
+      <span style="flex:1"></span>
+      <label class="sw" title="自检结果有异常时播放系统提示音（需本页保持打开）">
+        <input type="checkbox" id="soundSys"> 🔊 系统提示音</label>
+      <label class="sw" title="收到买家新消息时播放消息提示音（需本页保持打开）">
+        <input type="checkbox" id="soundMsg"> 🔔 消息提示音</label>
+    </div>
+    <pre id="lastSelfcheck" style="display:none"></pre>
+  </div>
+
+  <!-- 2. 营收状态 -->
+  <div class="card">
+    <h2>📈 营收状态</h2>
+    <div class="row">
+      <span>开始 <input type="date" id="revStart"></span>
+      <span>结束 <input type="date" id="revEnd"></span>
+      <select id="revProduct"><option value="">全部商品</option></select>
+      <button id="btnRev7" class="gray small">近7天</button>
+      <button id="btnRev30" class="gray small">近30天</button>
+      <button id="btnRevAll" class="gray small">全部</button>
+      <button id="btnRevQuery">查询</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>总营收：<b id="revTotal">¥0.00</b></span>
+      <span>订单数：<b id="revCount">0</b></span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div style="flex:1; min-width:280px">
+        <b class="hint">按日</b>
+        <table><thead><tr><th>日期</th><th>订单</th><th>金额</th></tr></thead><tbody id="revDayBody"></tbody></table>
+      </div>
+      <div style="flex:1; min-width:280px">
+        <b class="hint">按商品</b>
+        <table><thead><tr><th>商品</th><th>订单</th><th>金额</th></tr></thead><tbody id="revProdBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 商品同步 -->
+  <div class="card">
+    <h2>📦 商品同步</h2>
+    <p class="hint">说明：<b>重新发布</b>=商品被拍销售并自动发货后，按"发布间隔"在网页自动重新上架（新链接）；
+      开启【重新发布】时会自动保存发布信息，无需手动操作；
+      <b>删除</b>=真实删除（不可恢复）；<b>自动发货</b>=开启后按订单自动发送卡密库存。新同步商品默认不自动发货。
+      点击"闲鱼SKU / 内部SKU / 价格 / 状态"表头可按该列排序。</p>
+    <div class="row">
+      <span>显示
+        <select id="productFilter" style="width:104px" title="商品列表显示范围">
+          <option value="all">全部商品</option>
+          <option value="selling">在售商品</option>
+        </select>
+      </span>
+      <span>自动同步间隔(秒) <input type="number" id="autoSyncSec" style="width:80px" min="30"></span>
+      <button id="btnSaveSync" class="gray small">保存</button>
+      <button id="btnSyncProducts" class="small" style="background:#2ecc71">🔄 立即同步</button>
+    </div>
+    <table style="margin-top:8px">
+      <thead><tr><th>ID</th><th>标题</th>
+        <th class="sortable" data-sort="sku" title="点击排序">闲鱼SKU ⇅</th>
+        <th class="sortable" data-sort="internal_sku" title="点击排序">内部SKU ⇅</th>
+        <th class="sortable" data-sort="price" title="点击排序">价格 ⇅</th>
+        <th class="sortable" data-sort="status" title="点击排序">状态 ⇅</th>
+        <th>卡密(可用/总)</th>
+        <th>自动发货</th><th>重新发布</th><th>间隔/发货方式</th><th>操作</th></tr></thead>
+      <tbody id="productBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 4. 自动回复规则 -->
+  <div class="card">
+    <h2>🤖 自动回复规则（可一次应用到多个商品）</h2>
+    <p class="hint">新增规则时用下方"适用商品"选择要应用的商品（单行一个，仅显示内部SKU，已下架排后）；
+      点 <b>＋</b> 可再添加一行关联另一个商品，同一规则可一次性应用到多个（非全部）商品；
+      一行都不选 = <b>通用规则</b>（对所有商品生效）。匹配优先级：商品专属规则 &gt; 通用规则。</p>
+    <div class="row" style="margin-bottom:6px; flex-wrap:wrap">
+      <input id="ruleName" placeholder="规则名" style="width:120px">
+      <select id="ruleType">
+        <option value="contains">包含关键词</option>
+        <option value="regex">正则</option>
+        <option value="all">全部包含</option>
+      </select>
+      <input id="ruleKw" placeholder="关键词,逗号分隔" style="width:190px">
+      <input id="ruleTpl" placeholder="回复模板（支持{卡密}{商品名}{买家}）" style="width:250px">
+      <button id="btnAddRule">添加</button>
+    </div>
+    <div class="row" style="flex-wrap:wrap; align-items:center">
+      <span style="font-size:12px; color:#888">适用商品</span>
+      <span id="ruleProdRows" style="display:inline-flex; flex-wrap:wrap; gap:6px; align-items:center"></span>
+      <button id="btnAddRuleProd" class="small gray" title="为这条规则再关联一个商品">＋ 商品</button>
+      <span class="hint">不选 = 通用规则（全部商品）</span>
+      <button class="small" onclick="exportRulesCsv()" title="导出全部规则为 CSV（Excel 可直接打开编辑）">📤 导出CSV</button>
+      <button class="small" onclick="document.getElementById('ruleCsvFile').click()" title="从 CSV 导入规则：按规则名匹配——同名更新、新名新增；适用内部SKU 留空=通用规则，多个用 | 分隔">📥 导入CSV</button>
+      <input type="file" id="ruleCsvFile" accept=".csv,text/csv" style="display:none">
+      <span class="hint">CSV 列：名称 | 匹配类型 | 关键词 | 回复模板 | 适用内部SKU | 启用 | 冷却秒</span>
+    </div>
+    <div id="ruleGroups" style="margin-top:8px"></div>
+  </div>
+
+  <!-- 5. 卡密库存 -->
+  <div class="card">
+    <h2>🎫 卡密库存（按分组管理）</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="small" onclick="importKeysExcel()">📥 Excel导入（按SKU关联分组）</button>
+      <button class="small gray" onclick="downloadTemplate()">📄 模板下载</button>
+      <button class="small gray" onclick="downloadExport()">📤 表格导出</button>
+      <span class="hint">模板列：序号(忽略) | SKU | 卡密 | 销售状态(可用/停用，留空默认可用) | 备注 | 内部SKU | 循环使用(是/否)</span>
+    </div>
+    <div id="keyGroups"></div>
+  </div>
+
+  <!-- 6. 管理员账号 -->
+  <div class="card">
+    <h2>👤 管理员账号（绑定口令 / 定时报告 / 口令触发）</h2>
+    <p class="hint">绑定口令：任意闲鱼账号向本账号发送该口令即被绑定为管理员（仅可在此网页端解绑）。
+      定时报告：到达设定时间后向管理员账号发送 运行状态/运营汇报。口令触发：管理员发送对应口令可随时索取
+      （状态口令会执行一次<u>自检</u>：账号→消息通道→商品同步→规则引擎→发货就绪，并汇报结果）。</p>
+    <div class="row">
+      <span>绑定口令 <input id="admBind" placeholder="例如：绑定管理员" style="width:150px"></span>
+      <span>当前管理员：<b id="admPeer">-</b></span>
+      <button id="btnUnbind" class="small red">解绑</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <span>状态口令 <input id="admStatusPhrase" placeholder="例如：运行状态" style="width:130px"></span>
+      <span>汇报口令 <input id="admSalesPhrase" placeholder="例如：运营汇报" style="width:130px"></span>
+      <span>定时状态检查 <input type="time" id="admStatusTime" style="width:100px"></span>
+      <span>定时运营汇报 <input type="time" id="admSalesTime" style="width:100px"></span>
+      <button id="btnSaveAdm">保存设置</button>
+    </div>
+    <div style="margin-top:10px">
+      <b class="hint">自定义口令（管理员发送即执行；可选暂停/恢复助手、暂停/恢复某商品自动发货）</b>
+      <div id="phraseRows"></div>
+      <div class="row" style="margin-top:4px">
+        <button id="btnAddPhrase" class="small">＋ 添加口令</button>
+        <button id="btnSavePhrases" class="small" style="background:#2ecc71">保存口令</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>操作日志</h2>
+    <pre id="logBox"></pre>
+  </div>
+</main>
+
+<!-- 通知框（确定按钮 + 3秒自动关闭） -->
+<div id="notifyMask">
+  <div id="notifyBox">
+    <div id="notifyText"></div>
+    <div id="notifyActions"><button id="notifyOk" class="small">确定</button></div>
+  </div>
+</div>
+
+<!-- 使用声明模态 -->
+<div id="declareMask" class="modal-mask">
+  <div class="modal-box">
+    <h3>📜 软件使用声明</h3>
+    <div class="modal-txt">
+      <p>1. 本软件<b>仅限学习研究，不得用于商业用途</b>。请严格遵守闲鱼平台规则，<b>禁止用于诈骗 / 批量养号 / 引流 / 盗取他人账号</b>等任何违法操作。</p>
+      <p>2. 本软件基于网页版制作，<b>不具备网页版未提供的功能</b>；软件的使用无法保证账号安全，<b>请自负后果</b>。</p>
+      <p>3. 若不同意上述声明，请<b>立即删除该软件</b>，谢谢！</p>
+    </div>
+    <div id="declareAgreeBox">
+      <div class="hint" style="margin-bottom:4px">请输入以下内容以确认同意：<br><code style="background:#f4f4f4;padding:2px 6px">我完全同意上述使用声明，并愿自担风险</code></div>
+      <div style="display:flex; gap:6px">
+        <input id="declareAgreeInput" placeholder="请输入上方声明原文" style="flex:1">
+        <button id="btnDeclareConfirm" class="small" style="background:#2ecc71; white-space:nowrap">确定</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <span id="declareErr" class="hint" style="color:#e74c3c; flex:1"></span>
+      <button id="btnDeclareDisagree" class="small red">不同意</button>
+      <button id="btnDeclareAgree" class="small" style="background:#2ecc71">同意</button>
+    </div>
+  </div>
+</div>
+
+<!-- 捐赠与支持模态 -->
+<div id="supportMask" class="modal-mask">
+  <div class="modal-box" style="max-width:440px">
+    <h3>捐赠与支持</h3>
+    <div class="modal-txt">
+      <p>如果该软件对你有帮助，请帮忙点亮
+        <a href="https://github.com/polosug-cloud/xianyu-assistant-oss" target="_blank" rel="noopener"><b>Star</b></a>，
+        或者对作者进行捐赠，感谢。</p>
+      <p style="font-size:12px; color:#999; line-height:1.6">注意：捐赠仅表达支持，不提供任何额外服务，不要大额捐赠，不要相信本副本以外的其他副本，谢谢。</p>
+    </div>
+    <div id="supportQrBox"><div class="qr-empty" id="supportQrEmpty">资源暂不可用</div></div>
+    <div class="modal-actions" style="justify-content:flex-end">
+      <button id="btnSupportClose" class="small gray">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 支持（捐赠与支持）悬浮图标：在聊天图标上方 -->
+<button id="supportFab" title="捐赠与支持">❤️</button>
+
+<!-- 悬浮聊天窗口（多会话；位置固定不随滚动；人工查看收发与回复） -->
+<button id="chatFab" title="聊天窗口（多会话）">💬<span id="chatFabCnt" class="cnt">0</span></button>
+<div id="chatPanel">
+  <div id="chatHead"><b>💬 聊天（多会话）</b>
+    <span style="display:flex;gap:4px"><button class="small" id="chatRefresh">刷新</button>
+    <button class="small gray" id="chatClose">收起</button></span></div>
+  <div id="chatBody">
+    <div id="convList"></div>
+    <div id="msgBox">
+      <div id="msgList"><div id="chatEmpty">点击左侧会话查看消息；右侧可直接人工回复</div></div>
+      <div id="chatSendRow">
+        <button id="chatImgBtn" class="small" title="发送本地图片给当前买家">📎</button>
+        <button id="chatShotBtn" class="small" title="系统截图：打开系统截图工具框选，回输入框 Ctrl+V 粘贴发送">📷</button>
+        <textarea id="chatInput" placeholder="输入回复内容，Ctrl+Enter 或点发送；可直接 Ctrl+V 粘贴图片发送"></textarea>
+        <button id="chatSend">发送</button>
+        <input type="file" id="chatImgFile" accept="image/*" style="display:none">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('xy_token');
+let authHeaders = TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {};
+
+async function auth() {
+  if (localStorage.getItem('xy_token')) return;
+  const r = await fetch('/api/auth/token');
+  const d = await r.json();
+  localStorage.setItem('xy_token', d.token);
+  authHeaders = { 'Authorization': 'Bearer ' + d.token };
+}
+
+async function api(path, opts = {}) {
+  let r = await fetch(path, { ...opts, headers: { ...authHeaders, ...(opts.headers||{}) } });
+  if (r.status === 401) {
+    localStorage.removeItem('xy_token');
+    await auth();
+    r = await fetch(path, { ...opts, headers: { ...authHeaders, ...(opts.headers||{}) } });
+  }
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch (e) { detail = (await r.text()).slice(0, 120); }
+    throw new Error('HTTP ' + r.status + ' ' + detail);
+  }
+  const ct = r.headers.get('content-type') || '';
+  return ct.includes('application/json') ? r.json() : r.text();
+}
+
+// ---------- 登录 / 切换账号（弹出窗口方式） ----------
+const LOGIN_POLL_MS = 20000;   // 状态轮询间隔 20 秒
+let loginTimer = null;
+let loginActive = false;       // 防止重复启动登录流程
+
+async function startLogin(force) {
+  if (loginActive) return;
+  const st = await api('/api/status');
+  if (st.logged_in && !force) {
+    document.getElementById('loginMsg').textContent = '✅ 已登录，无需重复扫码；如需切换账号请点"切换账号"。';
+    return;
+  }
+  loginActive = true;
+  document.getElementById('loginMsg').textContent = '';
+  if (force && st.logged_in) {
+    document.getElementById('loginMsg').textContent = '正在退出当前账号…';
+    await api('/api/account/logout', { method: 'POST' });
+    // 等待登出生效（状态变为 offline），最多等 30s
+    for (let i = 0; i < 6; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const s2 = await api('/api/status');
+      if (!s2.logged_in && s2.browser.status === 'offline') break;
+    }
+  }
+  document.getElementById('loginMsg').textContent = '正在弹出闲鱼登录窗口…';
+  await api('/api/login/start', { method: 'POST' });
+  pollLogin();
+}
+async function pollLogin() {
+  const st = await api('/api/status');
+  const s = st.browser.status;
+  if (s === 'online') {
+    clearTimeout(loginTimer);
+    loginActive = false;
+    document.getElementById('loginMsg').textContent = '✅ 登录成功';
+    refreshAll();
+    return;
+  }
+  if (s === 'error') {
+    document.getElementById('loginMsg').textContent = '登录异常：' + (st.browser.last_error || '未知错误') + '（可重新点登录）';
+    loginActive = false;
+    return;
+  }
+  document.getElementById('loginMsg').textContent = '已弹出闲鱼登录窗口：请在弹出的浏览器窗口内，用手机【闲鱼 App】扫码登录（窗口最长保持 30 分钟；若二维码被收起会自动重新弹出）…';
+  loginTimer = setTimeout(pollLogin, LOGIN_POLL_MS);
+}
+async function downloadTemplate() {
+  try {
+    const r = await fetch('/api/card-keys/template', { headers: authHeaders });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'card_keys_template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('模板下载失败: ' + e.message); }
+}
+async function downloadExport() {
+  try {
+    const r = await fetch('/api/card-keys/export', { headers: authHeaders });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // 优先用后端返回的文件名（自带导出时间戳），取不到再回退
+    let fname = 'card_keys_export.xlsx';
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = /filename="?([^";]+)"?/.exec(cd);
+    if (m && m[1]) fname = m[1];
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('导出失败: ' + e.message); }
+}
+
+// ---------- 刷新 ----------
+async function refreshAll() {
+  const st = await api('/api/status');
+  document.getElementById('browserStatus').textContent = st.browser.status;
+  document.getElementById('loginStatus').textContent = st.logged_in ? '已登录' : '未登录';
+  document.getElementById('loginStatus').className = 'badge ' + (st.logged_in ? 'on' : 'off');
+  document.getElementById('conn').textContent = '已连接';
+  document.getElementById('conn').className = 'badge on';
+
+  // 账号信息（头像带防盗链 referrerpolicy + 加载失败回退首字圆底；昵称来自服务端）
+  const acct = await api('/api/account');
+  renderAccount(acct);
+  document.getElementById('btnSwitch').style.display = st.logged_in ? 'inline-block' : 'none';
+  // 自检结果 + 声音开关初始化 + 使用声明自动弹出（首次登录/切换账号）
+  renderSelfcheck(st.selfcheck);
+  syncSoundFromBackend(st);
+  syncSelfcheckControls();
+  checkDeclareAuto(acct);
+
+  // 若已处于登录流程中，自动显示扫码界面
+  if (st.browser.status === 'logging_in' && !loginActive) {
+    loginActive = true;
+    pollLogin();
+  }
+
+  await Promise.all([loadRevenue(), loadProducts(), loadRules(), loadKeys(), loadLogs(), loadAdmin()]);
+}
+
+// ---------- 账号展示（头像回退 / 昵称） ----------
+function renderAccount(acct) {
+  const name = (acct && acct.name) || (acct && acct.logged_in ? '' : '未登录');
+  const first = ((name || '闲').trim()[0] || '闲');
+  const wrap = document.getElementById('avatarWrap');
+  let html;
+  if (acct && acct.avatar) {
+    html = `<img class="avatar" src="${esc(acct.avatar)}" referrerpolicy="no-referrer" alt="头像" ` +
+      `onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'">` +
+      `<span class="avatar-fallback" style="display:none">${esc(first)}</span>`;
+  } else {
+    html = `<span class="avatar-fallback">${esc(first)}</span>`;
+  }
+  wrap.innerHTML = html;
+  document.getElementById('accountName').textContent = name || '(未获取到昵称)';
+  // 网页标题带账号名，多账号时便于识别
+  document.title = name ? `闲鱼助手 - ${name}` : '闲鱼助手';
+}
+
+// ---------- 自检结果展示 / 提示音开关 ----------
+function renderSelfcheck(sc) {
+  sc = sc || {};
+  const badge = document.getElementById('selfcheckBadge');
+  const pre = document.getElementById('lastSelfcheck');
+  if (sc.running) {
+    // 自检脚本正在完整重跑（手动/定时），先隐藏旧结果，展示运行中状态
+    badge.style.display = 'inline-block';
+    badge.textContent = '⏳ 自检运行中…';
+    badge.className = 'badge warn';
+    pre.style.display = 'none';
+    return;
+  }
+  if (sc.ts) {
+    badge.style.display = 'inline-block';
+    badge.textContent = (sc.ok ? '✅ 自检正常 ' : '❌ 自检异常 ') + sc.ts.slice(5, 16);
+    badge.className = 'badge ' + (sc.ok ? 'on' : 'off');
+    pre.style.display = 'block';
+    pre.textContent = sc.result || '';
+  } else {
+    badge.style.display = 'none';
+    pre.style.display = 'none';
+  }
+}
+
+function soundOn(kind) { return localStorage.getItem(kind) === '1'; }
+function syncSoundFromBackend(st) {
+  // 声音开关以后端（托盘/多页面共用）为准，同步到本地 checkbox 与播放开关
+  if (!st || !st.sound) return;
+  const s = !!st.sound.sys, m = !!st.sound.msg;
+  document.getElementById('soundSys').checked = s;
+  document.getElementById('soundMsg').checked = m;
+  localStorage.setItem('xy_sound_sys', s ? '1' : '0');
+  localStorage.setItem('xy_sound_msg', m ? '1' : '0');
+}
+function syncSelfcheckControls() {
+  // 仅在页面尚未加载过设置时拉取（防止覆盖用户刚改的值）
+  const en = document.getElementById('selfcheckEn');
+  if (!en.dataset.loaded) {
+    api('/api/settings/selfcheck_enabled').then(r => {
+      en.checked = r.value === '1';
+      en.dataset.loaded = '1';
+    }).catch(() => {});
+    api('/api/settings/selfcheck_interval_min').then(r => {
+      document.getElementById('selfcheckMin').value = r.value || 60;
+    }).catch(() => {});
+  }
+}
+
+let _audioCtx = null;
+let _soundBufs = {};   // 已解码提示音缓存
+
+function _audio() {
+  try {
+    if (!_audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      _audioCtx = new AC();
+    }
+    if (_audioCtx.state === 'suspended') { try { _audioCtx.resume(); } catch (e) {} }
+    return _audioCtx;
+  } catch (e) { return null; }
+}
+
+// 提示音（sys=系统提示音/自检异常；msg=消息提示音/收到消息）
+// 优先播放后端提供的 ogg 文件（/api/sounds/{kind}，见设置），失败/缺失时回退内置合成音。
+async function playTone(kind) {
+  const ctx = _audio();
+  if (!ctx) return;
+  try {
+    if (!_soundBufs[kind]) {
+      const r = await fetch('/api/sounds/' + kind, { headers: authHeaders, cache: 'force-cache' });
+      if (!r.ok) throw new Error('sound ' + r.status);
+      const ab = await r.arrayBuffer();
+      _soundBufs[kind] = await ctx.decodeAudioData(ab);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = _soundBufs[kind];
+    const g = ctx.createGain();
+    g.gain.value = 0.85;
+    src.connect(g); g.connect(ctx.destination);
+    src.start();
+  } catch (e) {
+    _fallbackTone(kind);   // 文件缺失/解码失败 → 内置合成音兜底
+  }
+}
+
+function _fallbackTone(kind) {
+  try {
+    const ctx = _audio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const cfg = kind === 'msg'
+      ? { freqs: [880, 1318], dur: 0.14, type: 'sine' }
+      : { freqs: [440, 440, 659], dur: 0.18, type: 'triangle' };
+    cfg.freqs.forEach((f, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = cfg.type; o.frequency.value = f;
+      const t = t0 + i * cfg.dur;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + cfg.dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + cfg.dur + 0.05);
+    });
+  } catch (e) { /* 无音频设备/被禁用时静默 */ }
+}
+
+// 用户任意点击时预热音频上下文（浏览器自动播放策略：需一次手势激活）
+document.addEventListener('pointerdown', () => { _audio(); }, { once: true });
+
+// ---------- 管理员账号 ----------
+async function loadAdmin() {
+  const keys = ['bind_phrase', 'admin_status_phrase', 'admin_sales_phrase',
+                'status_report_time', 'sales_report_time', 'admin_peer'];
+  const vals = {};
+  for (const k of keys) {
+    try { vals[k] = (await api('/api/settings/' + k)).value || ''; } catch (e) { vals[k] = ''; }
+  }
+  document.getElementById('admBind').value = vals.bind_phrase;
+  document.getElementById('admStatusPhrase').value = vals.admin_status_phrase;
+  document.getElementById('admSalesPhrase').value = vals.admin_sales_phrase;
+  document.getElementById('admStatusTime').value = vals.status_report_time;
+  document.getElementById('admSalesTime').value = vals.sales_report_time;
+  document.getElementById('admPeer').textContent = vals.admin_peer || '未绑定';
+  document.getElementById('btnUnbind').disabled = !vals.admin_peer;
+  document.getElementById('btnUnbind').title = vals.admin_peer ? '解绑当前管理员' : '当前未绑定管理员';
+  await loadPhrases();
+}
+
+// ---------- 自定义口令 ----------
+let phraseCache = [];
+
+async function loadPhrases() {
+  phraseCache = await api('/api/admin/phrases');
+  renderPhrases();
+}
+
+const PHRASE_ACTIONS = {
+  pause_agent: '⏸ 暂停助手（停自动回复/发货/同步/重发）',
+  resume_agent: '▶️ 恢复助手',
+  pause_deliver: '⏸ 暂停商品自动发货',
+  resume_deliver: '▶️ 恢复商品自动发货',
+};
+
+function renderPhrases() {
+  const skuOpts = '<option value="">选择商品(内部SKU)</option>' +
+    (internalSkuOptions.length ? internalSkuOptions.map(s =>
+      `<option value="${esc(s)}">${esc(s)}</option>`).join('') : '');
+  document.getElementById('phraseRows').innerHTML = phraseCache.map((it, i) => `
+    <div class="row" style="margin-top:4px">
+      <span>口令 <input data-p="phrase" value="${esc(it.phrase)}" style="width:120px" placeholder="如：暂停发货"></span>
+      <span>动作
+        <select data-p="action">
+          ${Object.keys(PHRASE_ACTIONS).map(a => `<option value="${a}" ${it.action === a ? 'selected' : ''}>${PHRASE_ACTIONS[a]}</option>`).join('')}
+        </select>
+      </span>
+      <span>目标商品
+        <select data-p="target"><option value="">（暂停/恢复助手不需要）</option>
+          ${internalSkuOptions.map(s => `<option value="${esc(s)}" ${it.target === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+        </select>
+      </span>
+      <button class="small red" onclick="removePhrase(${i})">删除</button>
+    </div>`).join('') || '<span class="hint">暂无自定义口令。示例：口令"休息一下"→暂停助手；"开工"→恢复助手；"停发罐子"→暂停某商品自动发货。</span>';
+  document.getElementById('btnAddPhrase').onclick = () => {
+    phraseCache.push({ phrase: '', action: 'pause_agent', target: '' });
+    renderPhrases();
+  };
+  document.getElementById('btnSavePhrases').onclick = async () => {
+    const rows = Array.from(document.querySelectorAll('#phraseRows .row')).map(row => ({
+      phrase: (row.querySelector('[data-p=phrase]') || {}).value || '',
+      action: (row.querySelector('[data-p=action]') || {}).value || '',
+      target: (row.querySelector('[data-p=target]') || {}).value || '',
+    })).filter(x => x.phrase.trim());
+    try {
+      const r = await api('/api/admin/phrases', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: rows }) });
+      showNotify('✅ 已保存 ' + r.count + ' 条自定义口令');
+      await loadPhrases();
+    } catch (e) { showNotify('❌ 保存失败：' + (e.message || e)); }
+  };
+}
+
+async function removePhrase(i) {
+  phraseCache.splice(i, 1);
+  renderPhrases();
+}
+
+// ---------- 营收 ----------
+async function loadRevenue() {
+  const q = new URLSearchParams();
+  if (document.getElementById('revStart').value) q.set('start', document.getElementById('revStart').value);
+  if (document.getElementById('revEnd').value) q.set('end', document.getElementById('revEnd').value);
+  const pid = document.getElementById('revProduct').value;
+  if (pid) q.set('product_id', pid);
+  const r = await api('/api/revenue?' + q.toString());
+  document.getElementById('revTotal').textContent = '¥' + r.total_amount.toFixed(2);
+  document.getElementById('revCount').textContent = r.total_orders;
+  document.getElementById('revDayBody').innerHTML = r.by_day.map(d =>
+    `<tr><td>${d.date}</td><td>${d.count}</td><td>¥${d.amount.toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="3">无数据</td></tr>';
+  document.getElementById('revProdBody').innerHTML = r.by_product.map(p =>
+    `<tr><td>${esc(p.title)}</td><td>${p.count}</td><td>¥${p.amount.toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="3">无数据</td></tr>';
+}
+
+// ---------- 商品（显示范围筛选 + 排序） ----------
+let prodSort = { key: 'id', dir: 1 };
+let _prodForRules = [];   // 规则"适用商品"下拉数据缓存
+
+async function loadProducts() {
+  let products = await api('/api/products');
+  const rev = document.getElementById('revProduct');
+  const cur = rev.value;
+  const stRank = { selling: 0, off: 1, sold: 2 };
+  const sorted = [...products].sort((a, b) => (stRank[a.status] ?? 9) - (stRank[b.status] ?? 9) || a.id - b.id);
+  rev.innerHTML = '<option value="">全部商品</option>' + sorted.map(p => `<option value="${p.id}">${esc(p.title)}</option>`).join('');
+  if (cur) rev.value = cur;
+
+  // 规则"适用商品"（单行一个 select；仅内部SKU；已下架排末尾；保留已选）
+  _prodForRules = sorted;
+  initRuleProdRows();
+  fillRuleProdOptions();
+
+  const syncSec = document.getElementById('autoSyncSec');
+  if (!syncSec.dataset.loaded) {
+    const s = await api('/api/settings/auto_sync_interval_sec');
+    syncSec.value = s.value || 600;
+    syncSec.dataset.loaded = '1';
+  }
+
+  // 显示范围：在售商品 / 全部商品（默认全部，本地记忆）
+  const filterSel = document.getElementById('productFilter');
+  const saved = localStorage.getItem('xy_prod_filter') || 'all';
+  if (filterSel.value !== saved) filterSel.value = saved;
+  const shown = filterSel.value === 'selling' ? products.filter(p => p.status === 'selling') : products;
+
+  // 客户端排序（SKU/内部SKU/价格/状态）
+  const { key, dir } = prodSort;
+  shown.sort((a, b) => {
+    let va = a[key], vb = b[key];
+    if (key === 'price') { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; }
+    else { va = (va == null ? '' : String(va)); vb = (vb == null ? '' : String(vb)); }
+    return (va > vb ? 1 : va < vb ? -1 : 0) * dir;
+  });
+
+  const stMap = { selling: '🟢在售', sold: '🔴已售', off: '⚪下架' };
+  document.getElementById('productBody').innerHTML = shown.map(p => `<tr>
+    <td>${p.id}</td><td>${esc(p.title)}</td>
+    <td>${esc(p.sku||'')}</td>
+    <td><input value="${esc(p.internal_sku||'')}" style="width:90px"
+        onchange="setInternalSku(${p.id}, this.value)" placeholder="内部SKU"></td>
+    <td>¥${p.price||0}</td><td>${stMap[p.status]||p.status}</td>
+    <td>${p.avail_keys||0}/${p.total_keys||0}</td>
+    <td><button class="small ${p.auto_deliver ? '' : 'gray'}" onclick="toggleAutoDeliver(${p.id}, ${p.auto_deliver?0:1})">${p.auto_deliver ? '✅开' : '⏸关'}</button></td>
+    <td><button class="small ${p.auto_relist ? '' : 'gray'}" onclick="toggleRepublish(${p.id}, ${p.auto_relist?0:1})">${p.auto_relist ? '✅开' : '⏸关'}</button></td>
+    <td><input type="number" min="0" value="${p.relist_interval_sec||0}" style="width:56px"
+        onchange="setRepublishInterval(${p.id}, this.value)" title="售出自动发货后到点自动重新上架（秒）">
+      <span style="font-size:11px;color:#999">秒</span>
+      <select onchange="setDeliveryMode(${p.id}, this.value)" title="重发时发货方式" style="width:86px">
+        <option value="" ${!p.delivery_mode ? 'selected' : ''}>包邮</option>
+        <option value="no_mail" ${p.delivery_mode==='no_mail' ? 'selected' : ''}>无需邮寄</option>
+        <option value="buyout" ${p.delivery_mode==='buyout' ? 'selected' : ''}>一口价</option>
+        <option value="post" ${p.delivery_mode==='post' ? 'selected' : ''}>按距离</option>
+      </select></td>
+    <td>
+      <button class="small red" onclick="realDelete(${p.id})">删除</button>
+    </td></tr>`).join('') || '<tr><td colspan="11" class="hint">无匹配商品：当前显示范围为【' +
+    (filterSel.value === 'selling' ? '在售商品' : '全部商品') + '】</td></tr>';
+}
+
+// ---------- 规则"适用商品"动态行（单行一个；＋ 持续增加） ----------
+function ruleProdRowHtml() {
+  return `<select class="ruleProdSel"></select>` +
+    `<button class="rule-prod-del small gray" onclick="removeRuleProdRow(this)" title="移除该商品">×</button>`;
+}
+function addRuleProdRow() {
+  const c = document.getElementById('ruleProdRows');
+  const span = document.createElement('span');
+  span.className = 'rule-prod-row';
+  span.innerHTML = ruleProdRowHtml();
+  c.appendChild(span);
+  fillRuleProdOptions(span);
+}
+function initRuleProdRows() {
+  const c = document.getElementById('ruleProdRows');
+  if (!c.querySelector('.ruleProdSel')) addRuleProdRow();
+}
+function fillRuleProdOptions(scope) {
+  // 有内部SKU 的商品才可选（仅显示内部SKU；已下架/已售排末尾由调用方 sorted 保证）
+  const list = (_prodForRules || []).filter(p => p.internal_sku && String(p.internal_sku).trim());
+  const opts = list.map(p =>
+    `<option value="${p.id}">${esc(p.internal_sku)}` +
+    `${p.status === 'selling' ? '' : '（' + ({off: '下架', sold: '已售'}[p.status] || p.status) + '）'}</option>`).join('');
+  const sels = scope
+    ? [scope.querySelector ? scope.querySelector('.ruleProdSel') : null].filter(Boolean)
+    : Array.from(document.querySelectorAll('#ruleProdRows .ruleProdSel'));
+  sels.forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML = opts || '<option value="">（无已设内部SKU的商品）</option>';
+    if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+    else sel.selectedIndex = 0;
+  });
+}
+function removeRuleProdRow(btn) {
+  const c = document.getElementById('ruleProdRows');
+  const rows = Array.from(c.querySelectorAll('.rule-prod-row'));
+  if (rows.length <= 1) { rows[0].querySelector('.ruleProdSel').value = ''; return; }  // 保留至少一行
+  btn.closest('.rule-prod-row').remove();
+}
+function collectRuleProds() {
+  const out = [];
+  document.querySelectorAll('#ruleProdRows .ruleProdSel').forEach(s => {
+    const v = s.value;
+    if (v && !out.includes(v)) out.push(parseInt(v, 10));
+  });
+  return out;
+}
+function resetRuleProdRows() {
+  const c = document.getElementById('ruleProdRows');
+  c.innerHTML = '';
+  addRuleProdRow();
+}
+async function toggleAutoDeliver(pid, en) {
+  await api('/api/products/' + pid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_deliver: en }) });
+  refreshAll();
+}
+async function setInternalSku(pid, v) {
+  await api('/api/products/' + pid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ internal_sku: v }) });
+}
+async function toggleRepublish(pid, en) {
+  if (!en) {
+    await api('/api/products/' + pid + '/auto-relist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: 0, interval_sec: 0 }) });
+    refreshAll();
+    return;
+  }
+  // 间隔在本行"间隔/发货方式"列设置（单位：秒）；开启时直接用该列已保存的间隔，未设则默认 60
+  let sec = 60;
+  try {
+    const all = await api('/api/products');
+    const p = all.find(x => x.id === pid);
+    if (p && parseInt(p.relist_interval_sec, 10) > 0) sec = parseInt(p.relist_interval_sec, 10);
+  } catch (e) { /* 忽略读取失败，用默认 */ }
+  await api('/api/products/' + pid + '/auto-relist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: 1, interval_sec: sec }) });
+  // 开启后自动保存发布信息（供自动重发复用）；保存结果见操作日志
+  await api('/api/products/' + pid + '/save-publish-info', { method: 'POST' });
+  refreshAll();   // 不弹窗：直接刷新，按钮变为 ✅开
+}
+async function setRepublishInterval(pid, sec) {
+  await api('/api/products/' + pid + '/auto-relist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ interval_sec: parseInt(sec) || 0 }) });
+}
+async function setDeliveryMode(pid, mode) {
+  await api('/api/products/' + pid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delivery_mode: mode }) });
+  refreshAll();
+}
+async function realDelete(pid) {
+  if (!confirm('⚠️ 确认真实删除该商品？（不可恢复！真实链接将被删除，同时删除本地卡密与规则）')) return;
+  if (!confirm('再次确认：这将从闲鱼真实删除该商品链接，确定继续？')) return;
+  await api('/api/products/' + pid, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm_delete: true }) });
+  showNotify('✅ 删除任务已提交（真实商品调用平台删除，见日志）');
+  setTimeout(refreshAll, 8000);
+}
+
+// ---------- 规则（扁平列表：一次可关联多个商品） ----------
+async function loadRules() {
+  const rules = await api('/api/rules');
+  const products = await api('/api/products');
+  const nameOf = pid => {
+    const p = products.find(x => x.id === pid);
+    // 适用商品列只显示内部SKU（缩小列宽，让回复模板列更宽完整显示）
+    if (p && p.internal_sku && String(p.internal_sku).trim()) return String(p.internal_sku).trim();
+    return p ? ('商品#' + p.id) : ('商品#' + pid);
+  };
+  const typeMap = { contains: '包含', regex: '正则', all: '全含' };
+  let html = `<table><thead><tr><th style="width:110px">名称</th><th>类型</th><th style="width:150px">关键词</th>` +
+    `<th style="min-width:300px">回复模板</th><th style="min-width:100px">适用商品</th><th>状态</th><th style="width:130px">操作</th></tr></thead><tbody>`;
+  for (const r of rules) {
+    const ids = (r.product_ids && r.product_ids.length) ? r.product_ids : [];
+    const app = ids.length
+      ? ids.map(nameOf).join('、')
+      : '<b>通用（所有商品）</b>';
+    html += `<tr>
+      <td>${esc(r.name || '')}</td><td>${typeMap[r.match_type] || r.match_type}</td><td>${esc(r.keywords)}</td>
+      <td><textarea rows="${Math.min(8, Math.max(1, Math.ceil(((r.reply_template || '').length) / 34)))}" style="width:98%; resize:vertical; font:inherit" title="可直接修改回复模板（支持{卡密}{商品名}{买家}），内容多时自动多行显示，失焦保存"
+          onchange="updateRuleTemplate(${r.id}, this.value)">${esc(r.reply_template)}</textarea></td>
+      <td>${app}</td><td>${r.enabled ? '✅' : '⏸'}</td>
+      <td><button class="small" onclick="toggleRule(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? '停用' : '启用'}</button>
+          <button class="small red" onclick="delRule(${r.id})">删除</button></td></tr>`;
+  }
+  html += `</tbody></table>`;
+  document.getElementById('ruleGroups').innerHTML =
+    (rules.length ? html : '<p class="hint">暂无规则：在上方填写后点【添加】；默认"问候/库存/催发货"规则为通用规则</p>');
+}
+async function updateRuleTemplate(id, val) {
+  if (!(val || '').trim()) { showNotify('⚠️ 回复模板不能为空'); return; }
+  await api('/api/rules/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reply_template: val }) });
+  showNotify('✅ 规则模板已修改');
+}
+async function toggleRule(id, en) { await api('/api/rules/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: en }) }); refreshAll(); }
+async function delRule(id) { if (!confirm('删除该规则？')) return; await api('/api/rules/' + id, { method: 'DELETE' }); refreshAll(); }
+
+// ---------- 规则 CSV 导入 / 导出 ----------
+async function exportRulesCsv() {
+  try {
+    const r = await fetch('/api/rules/export', { headers: authHeaders });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    let fname = 'reply_rules.csv';
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = /filename="?([^";]+)"?/.exec(cd);
+    if (m && m[1]) fname = m[1];
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showNotify('✅ 规则已导出：' + fname);
+  } catch (e) { showNotify('❌ 导出失败：' + (e.message || e)); }
+}
+document.getElementById('ruleCsvFile').onchange = async () => {
+  const f = document.getElementById('ruleCsvFile');
+  if (!f.files || !f.files.length) return;
+  const fd = new FormData();
+  fd.append('file', f.files[0], f.files[0].name);
+  try {
+    const r = await api('/api/rules/import', { method: 'POST', body: fd });
+    let msg = `✅ 导入完成：新增 ${r.created} 条，更新 ${r.updated} 条`;
+    if (r.skipped_empty) msg += `，跳过 ${r.skipped_empty} 条（缺关键词/模板）`;
+    if (r.sku_missing && r.sku_missing.length) msg += `；未匹配到的内部SKU：${r.sku_missing.join('、')}`;
+    showNotify(msg);
+    refreshAll();
+  } catch (e) { showNotify('❌ 导入失败：' + (e.detail || e.message || e)); }
+  f.value = '';
+};
+
+// ---------- 卡密（分组管理：手工新增 / Excel按SKU导入 / 循环复用） ----------
+let internalSkuOptions = [];
+
+async function loadKeys() {
+  const products = await api('/api/products');
+  const keys = await api('/api/card-keys?limit=500');
+  const skuList = await api('/api/products/internal-skus');
+  internalSkuOptions = skuList.map(s => s.internal_sku).filter(s => s);
+  // 只显示有卡密或手工创建（item_id 为空）的分组
+  const visible = products.filter(p => p.total_keys > 0 || !p.item_id);
+  const groups = new Map();
+  for (const k of keys) {
+    const pid = k.product_id || 0;
+    if (!groups.has(pid)) groups.set(pid, []);
+    groups.get(pid).push(k);
+  }
+  let html = '';
+  for (const p of visible) {
+    const list = groups.get(p.id) || [];
+    const avail = list.filter(k => k.status === 'available').length;
+    const stTxt = k => ({ available: '✅可用', sold: '🔒已售', disabled: '⛔停用' })[k.status] || k.status;
+    html += `<div class="group">
+      <div class="group-title">${esc(p.title)}（可用 ${avail}/${list.length}）
+        <span>
+          <button class="small red" onclick="delKeyGroup(${p.id})" title="仅删除本分组下的全部卡密；商品本身与自动回复规则均不受影响">删除本组全部卡密</button>
+        </span>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <span class="hint">卡密请使用顶部「📥 Excel导入（按SKU关联分组）」导入</span>
+      </div>
+      <table><thead><tr><th>ID</th><th>卡密</th><th>备注</th><th>内部SKU</th><th>状态</th><th>循环(次数)</th><th>操作</th></tr></thead><tbody>` +
+      (list.map(k => {
+        const cur = k.internal_sku || '';
+        let selOpts = '<option value="">（未关联）</option>';
+        const set = new Set(internalSkuOptions);
+        if (cur && !set.has(cur)) set.add(cur);
+        set.forEach(s => { selOpts += `<option value="${esc(s)}" ${cur === s ? 'selected' : ''}>${esc(s)}</option>`; });
+        return `<tr>
+        <td>${k.id}</td><td>${esc(k.key_content)}</td>
+        <td><input value="${esc(k.remark||'')}" style="width:110px" onchange="updateKeyRemark(${k.id}, this.value)"></td>
+        <td><select onchange="updateKeyInternalSku(${k.id}, this.value)">${selOpts}</select></td>
+        <td>${stTxt(k)}</td>
+        <td><button class="small ${k.recycle_enabled ? '' : 'gray'}" onclick="toggleRecycle(${k.id}, ${k.recycle_enabled?0:1})" title="开启循环需先关联内部SKU并设置循环次数；发货无可用卡密时自动从同内部SKU循环池复用（不要求商品开启重新发布）">${k.recycle_enabled ? '循环中' : '循环关'}</button>
+            <input type="number" min="1" value="${k.recycle_limit||0}" style="width:50px" title="循环次数上限"
+              onchange="setRecycleLimit(${k.id}, this.value)">
+            <span class="hint">已用${k.recycle_count||0}/${k.recycle_limit||0}</span></td>
+        <td>
+          ${k.status === 'available' ? `<button class="small gray" onclick="toggleKeyDisabled(${k.id},1)">停用</button>` : ''}
+          ${k.status === 'sold' ? `<button class="small gray" onclick="toggleKeyDisabled(${k.id},1)" title="停用该已售卡密（退出循环池，不再被复用）；恢复请点启用">停用</button>` : ''}
+          ${k.status === 'disabled' ? `<button class="small" onclick="toggleKeyDisabled(${k.id},0)">启用</button>` : ''}
+          <button class="small red" onclick="delKey(${k.id})">删除</button>
+        </td></tr>`;
+      }).join('') || '<tr><td colspan="7" class="hint">无卡密（请使用顶部「📥 Excel导入（按SKU关联分组）」导入）</td></tr>') + `</tbody></table></div>`;
+  }
+  document.getElementById('keyGroups').innerHTML = html || '<p class="hint">暂无卡密：请用顶部「📥 Excel导入（按SKU关联分组）」导入，导入时会按 SKU 自动建组</p>';
+}
+async function toggleRecycle(kid, en) {
+  if (!en) { // 关闭循环：直接关
+    try { await api('/api/card-keys/' + kid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_enabled: 0 }) }); refreshAll(); }
+    catch (e) { alert('操作失败：' + (e.message || e)); }
+    return;
+  }
+  // 开启循环：先刷新一次拿最新行数据校验本地可提示条件
+  const ks = await api('/api/card-keys');
+  const k = (ks || []).find(x => x.id === kid);
+  if (!k) { alert('未找到该卡密'); return; }
+  if (!k.internal_sku) { alert('请先在该卡密行选择【内部SKU】再开启循环（循环复用按内部SKU自动从循环池取用）'); return; }
+  if (!(k.recycle_limit > 0)) { alert('请先设置【循环次数】大于0再开启循环'); return; }
+  try {
+    await api('/api/card-keys/' + kid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_enabled: 1 }) });
+    refreshAll();
+  } catch (e) { alert('开启循环失败：' + (e.message || e)); }
+}
+async function setRecycleLimit(kid, v) {
+  const lim = parseInt(v) || 0;
+  if (lim < 0) { alert('循环次数不能为负数'); return; }
+  try {
+    await api('/api/card-keys/' + kid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_limit: lim }) });
+    refreshAll();
+  } catch (e) { alert('设置失败：' + (e.message || e)); }
+}
+async function updateKeyInternalSku(kid, v) { try { await api('/api/card-keys/' + kid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ internal_sku: v }) }); refreshAll(); } catch (e) { alert('关联失败：' + (e.message || e)); } }
+async function importKeysExcel() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.onchange = async () => {
+    if (!input.files.length) return;
+    const fd = new FormData();
+    fd.append('file', input.files[0]);
+    try {
+      const r = await api('/api/card-keys/import-excel', { method: 'POST', body: fd });
+      let msg = `Excel 导入 ${r.imported} 条卡密`;
+      if (r.no_sku_skipped) msg += `（${r.no_sku_skipped} 行缺少SKU已跳过）`;
+      alert(msg); refreshAll();
+    } catch (e) { alert('导入失败: ' + e.message); }
+  };
+  input.click();
+}
+async function updateKeyRemark(kid, remark) { await api('/api/card-keys/' + kid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ remark }) }); }
+async function toggleKeyDisabled(kid, disabled) { await api('/api/card-keys/' + kid, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ disabled }) }); refreshAll(); }
+async function delKey(kid) { if (!confirm('删除该卡密？')) return; await api('/api/card-keys/' + kid, { method: 'DELETE' }); refreshAll(); }
+async function delKeyGroup(pid) {
+  if (!confirm('⚠️ 仅删除该分组下的全部卡密？\n\n商品本身与自动回复规则【不会】受影响。')) return;
+  await api('/api/card-keys/group/' + pid, { method: 'DELETE' });
+  showNotify('✅ 已删除该分组全部卡密（商品与规则保留）');
+  refreshAll();
+}
+
+// ---------- 日志（增量更新：文本不变不重绘，避免打断阅读） ----------
+let _logText = '';
+function setLogText(txt) { if (txt === _logText) return; _logText = txt; document.getElementById('logBox').textContent = txt; }
+async function loadLogs() {
+  const logs = await api('/api/logs?limit=150');
+  setLogText(logs.map(l => `[${l.ts}] ${l.level.toUpperCase()} ${l.module}: ${l.message}`).join('\n'));
+}
+
+// ---------- 工具 ----------
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function val(id) { return document.getElementById(id).value; }
+
+// ---------- 通知框（确定按钮 + 3 秒自动关闭） ----------
+let _notifySeq = 0, _notifyTimer = null;
+function showNotify(msg, autoMs = 3000) {
+  const seq = ++_notifySeq;
+  document.getElementById('notifyText').textContent = msg;
+  document.getElementById('notifyMask').classList.add('show');
+  clearTimeout(_notifyTimer);
+  _notifyTimer = setTimeout(() => { if (seq === _notifySeq) closeNotify(); }, autoMs);
+}
+function closeNotify() {
+  _notifySeq++;
+  document.getElementById('notifyMask').classList.remove('show');
+}
+document.getElementById('notifyOk').onclick = closeNotify;
+
+// 商品列表显示范围（在售商品 / 全部商品；默认全部，本地记忆）
+const prodFilterSel = document.getElementById('productFilter');
+prodFilterSel.value = localStorage.getItem('xy_prod_filter') || 'all';
+prodFilterSel.onchange = () => {
+  localStorage.setItem('xy_prod_filter', prodFilterSel.value);
+  loadProducts();
+};
+
+// ---------- 事件绑定 ----------
+document.getElementById('btnLogin').onclick = () => startLogin(false);
+document.getElementById('btnSwitch').onclick = () => {
+  if (confirm('切换账号将退出当前登录并重新弹出登录窗口，确定？')) startLogin(true);
+};
+document.getElementById('btnSyncProducts').onclick = async () => {
+  const btn = document.getElementById('btnSyncProducts');
+  btn.disabled = true; btn.textContent = '同步中…';
+  const scope = document.getElementById('productFilter').value === 'selling' ? '在售商品' : '全部商品';
+  try {
+    await api('/api/products/sync', { method: 'POST' });
+    showNotify('✅ 同步任务已提交（当前显示：' + scope + '），8 秒后自动刷新列表');
+    setTimeout(refreshAll, 8000);
+  } catch (e) { showNotify('❌ 同步失败：' + (e.message || e)); }
+  btn.disabled = false; btn.textContent = '🔄 立即同步';
+};
+document.getElementById('btnSaveSync').onclick = async () => {
+  await api('/api/settings/auto_sync_interval_sec', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value: parseInt(val('autoSyncSec')) || 600 }) });
+  showNotify('✅ 已保存自动同步间隔'); refreshAll();
+};
+document.getElementById('btnAddRule').onclick = async () => {
+  const name = val('ruleName').trim();
+  if (!name) { showNotify('⚠️ 请填写规则名'); return; }
+  const product_ids = collectRuleProds();
+  await api('/api/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name, match_type: val('ruleType'), keywords: val('ruleKw'),
+      reply_template: val('ruleTpl'), product_ids: product_ids }) });
+  document.getElementById('ruleName').value = ''; document.getElementById('ruleKw').value = ''; document.getElementById('ruleTpl').value = '';
+  resetRuleProdRows(); fillRuleProdOptions();
+  showNotify(product_ids.length
+    ? `✅ 已添加规则（适用 ${product_ids.length} 个商品）`
+    : '✅ 已添加通用规则（所有商品生效）');
+  refreshAll();
+};
+document.getElementById('btnAddRuleProd').onclick = addRuleProdRow;
+document.getElementById('btnRevQuery').onclick = loadRevenue;
+document.getElementById('btnRev7').onclick = () => { setRange(7); loadRevenue(); };
+document.getElementById('btnRev30').onclick = () => { setRange(30); loadRevenue(); };
+document.getElementById('btnRevAll').onclick = () => { document.getElementById('revStart').value = ''; document.getElementById('revEnd').value = ''; loadRevenue(); };
+document.getElementById('btnSaveAdm').onclick = async () => {
+  const set = [
+    ['bind_phrase', val('admBind')],
+    ['admin_status_phrase', val('admStatusPhrase')],
+    ['admin_sales_phrase', val('admSalesPhrase')],
+    ['status_report_time', val('admStatusTime')],
+    ['sales_report_time', val('admSalesTime')],
+  ];
+  for (const [k, v] of set) {
+    await api('/api/settings/' + k, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: v }) });
+  }
+  showNotify('✅ 管理员设置已保存');
+  refreshAll();
+};
+document.getElementById('btnUnbind').onclick = async () => {
+  if (!confirm('解绑当前管理员账号？解绑后需重新通过绑定口令绑定。')) return;
+  await api('/api/settings/admin_peer', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: '' }) });
+  showNotify('✅ 已解绑管理员');
+  refreshAll();
+};
+// ---------- 自检开关 / 立即自检 / 声音开关 ----------
+document.getElementById('selfcheckEn').onchange = async () => {
+  const en = document.getElementById('selfcheckEn').checked ? '1' : '0';
+  await api('/api/settings/selfcheck_enabled', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: en }) });
+  showNotify(en === '1' ? '✅ 已开启定时自检' : '已关闭定时自检（可手动点"立即自检"）');
+};
+document.getElementById('selfcheckMin').onchange = async () => {
+  const m = Math.max(parseInt(document.getElementById('selfcheckMin').value) || 60, 1);
+  document.getElementById('selfcheckMin').value = m;
+  await api('/api/settings/selfcheck_interval_min', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: m }) });
+  showNotify('✅ 自检间隔已设为 ' + m + ' 分钟');
+};
+document.getElementById('btnSelfcheck').onclick = async () => {
+  const btn = document.getElementById('btnSelfcheck');
+  btn.disabled = true; btn.textContent = '自检中…';
+  try {
+    renderSelfcheck({ running: true });   // 立即进入"运行中"（完整重跑自检脚本）
+    await api('/api/selfcheck', { method: 'POST' });
+    showNotify('✅ 自检任务已提交（正在重新运行完整自检脚本…），结果将显示在上方并写入操作日志');
+    setTimeout(lightPoll, 6000);
+  } catch (e) { showNotify('❌ 自检触发失败：' + (e.message || e)); }
+  btn.disabled = false; btn.textContent = '▶ 立即自检';
+};
+document.getElementById('soundSys').onchange = () => {
+  const on = document.getElementById('soundSys').checked;
+  localStorage.setItem('xy_sound_sys', on ? '1' : '0');
+  api('/api/settings/sound_sys_enabled', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: on ? '1' : '0' }) }).catch(() => {});
+};
+document.getElementById('soundMsg').onchange = () => {
+  const on = document.getElementById('soundMsg').checked;
+  localStorage.setItem('xy_sound_msg', on ? '1' : '0');
+  api('/api/settings/sound_msg_enabled', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: on ? '1' : '0' }) }).catch(() => {});
+};
+
+// ---------- 使用声明（首次登录/切换账号自动弹出；不同意则关闭助手） ----------
+const DECLARE_OK_TEXT = '我完全同意上述使用声明，并愿自担风险';
+let _declareOfferedUid = '';
+function agreeKey(uid) { return 'xy_agree_' + (uid || ''); }
+function agreeStored(uid) { return !!localStorage.getItem(agreeKey(uid)); }
+function showDeclare() {
+  document.getElementById('declareErr').textContent = '';
+  document.getElementById('declareAgreeBox').style.display = 'none';
+  document.getElementById('declareAgreeInput').value = '';
+  document.getElementById('declareMask').classList.add('show');
+}
+function closeDeclare() { document.getElementById('declareMask').classList.remove('show'); }
+function checkDeclareAuto(acct) {
+  try {
+    if (!acct || !acct.logged_in || !acct.userId) return;
+    const uid = String(acct.userId);
+    if (_declareOfferedUid === uid) return;          // 本账号已在本页检查过
+    _declareOfferedUid = uid;
+    if (!agreeStored(uid)) showDeclare();            // 首次登录/切换新账号且未同意 → 自动弹出
+  } catch (e) { /* 忽略 */ }
+}
+document.getElementById('btnDeclare').onclick = () => { showDeclare(); };
+document.getElementById('btnDeclareAgree').onclick = () => {
+  // 第一步：显示输入行（输入框+右侧确定按钮），由用户手工输入声明原文
+  const box = document.getElementById('declareAgreeBox');
+  const err = document.getElementById('declareErr');
+  box.style.display = 'block';
+  err.textContent = '请在下框手工输入同意声明原文，点【确定】完成同意：';
+  document.getElementById('declareAgreeInput').focus();
+};
+async function confirmDeclareAgree() {
+  const input = document.getElementById('declareAgreeInput');
+  const err = document.getElementById('declareErr');
+  if (input.value.trim() !== DECLARE_OK_TEXT) {
+    err.textContent = '❌ 输入内容与声明原文不一致，请照抄后再点【确定】';
+    return;
+  }
+  const acct = await api('/api/account').catch(() => null);
+  const uid = (acct && acct.userId) || 'guest';
+  localStorage.setItem(agreeKey(uid), '1');
+  closeDeclare();
+  showNotify('✅ 已同意使用声明');
+}
+document.getElementById('btnDeclareConfirm').onclick = confirmDeclareAgree;
+document.getElementById('declareAgreeInput').addEventListener('keydown', ev => {
+  if (ev.key === 'Enter') confirmDeclareAgree();
+});
+document.getElementById('btnDeclareDisagree').onclick = async () => {
+  const sure = confirm('不同意使用声明将【完全关闭助手】。确定？');
+  if (!sure) return;
+  try { await api('/api/app/exit', { method: 'POST' }); } catch (e) { /* 进程退出后请求失败属正常 */ }
+  showNotify('助手正在完全关闭…请稍候（进程退出后本页将无法访问）');
+};
+
+// ---------- 捐赠与支持 ----------
+document.getElementById('supportFab').onclick = () => {
+  document.getElementById('supportMask').classList.add('show');
+  loadSupportQr();
+};
+document.getElementById('btnSupportClose').onclick = () => document.getElementById('supportMask').classList.remove('show');
+function showSupportQrEmpty() {
+  document.getElementById('supportQrBox').innerHTML =
+    '<div class="qr-empty" id="supportQrEmpty">资源暂不可用</div>';
+}
+async function loadSupportQr() {
+  try {
+    const r = await fetch('/api/support/qr', { headers: authHeaders });
+    if (!r.ok) { showSupportQrEmpty(); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    document.getElementById('supportQrBox').innerHTML =
+      `<img id="supportQr" src="${url}" alt="二维码">`;
+  } catch (e) { showSupportQrEmpty(); }
+}
+
+// 商品表头排序
+document.addEventListener('click', ev => {
+  const th = ev.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (prodSort.key === key) prodSort.dir *= -1; else prodSort = { key, dir: 1 };
+  loadProducts();
+});
+function setRange(days) {
+  const end = new Date(); const start = new Date(Date.now() - days * 86400000);
+  const f = d => d.toISOString().slice(0, 10);
+  document.getElementById('revStart').value = f(start);
+  document.getElementById('revEnd').value = f(end);
+}
+
+// ---------- 轻轮询（状态/自检/日志增量/提示音） ----------
+let _lastScTs = localStorage.getItem('xy_last_sc_ts') || '';
+async function lightPoll() {
+  try {
+    const st = await api('/api/status');
+    const bs = document.getElementById('browserStatus');
+    if (bs.textContent !== st.browser.status) {
+      bs.textContent = st.browser.status;
+      bs.className = 'badge ' + (st.logged_in ? 'on' : 'off');
+    }
+    const ls = document.getElementById('loginStatus');
+    const want = st.logged_in ? '已登录' : '未登录';
+    if (ls.textContent !== want) {
+      ls.textContent = want;
+      ls.className = 'badge ' + (st.logged_in ? 'on' : 'off');
+      if (st.logged_in) { loadLogs(); }
+    }
+    document.getElementById('btnSwitch').style.display = st.logged_in ? 'inline-block' : 'none';
+    const sc = st.selfcheck || {};
+    if (sc.running) {
+      renderSelfcheck(sc);   // 定时/口令触发的自检，页面同步显示"运行中"
+    } else if (sc.ts && sc.ts !== _lastScTs) {
+      _lastScTs = sc.ts;
+      localStorage.setItem('xy_last_sc_ts', sc.ts);
+      renderSelfcheck(sc);
+      if (!sc.ok && soundOn('xy_sound_sys')) playTone('sys');  // 自检异常 → 系统提示音
+    }
+    // 账号名/头像偶尔刷新（避免 hello 等脏值常驻）
+    const acct = await api('/api/account');
+    const curName = document.getElementById('accountName').textContent;
+    if ((acct.name && acct.name !== curName) || (acct.logged_in && curName === '(未获取到昵称)')) {
+      renderAccount(acct);
+    } else if (!acct.logged_in && curName !== '未登录') {
+      renderAccount(acct);
+    }
+    syncSoundFromBackend(st);
+    checkDeclareAuto(acct);
+    await loadLogs();
+  } catch (e) { /* 页面加载中/瞬断忽略 */ }
+}
+
+// ---------- 悬浮聊天窗口（多会话查看/人工回复） ----------
+const CHAT_POLL_MS = 2500;
+let chatOpen = false, chatActivePeer = null;
+let chatSeen = parseInt(localStorage.getItem('xy_chat_seen') || '0', 10);
+let _convCache = [];
+let _pend = {};   // peer -> {text, t0} 发送中的乐观消息
+
+function chatTotalUnread() {
+  const read = chatReadMap();
+  return _convCache.filter(c => c.last_dir === 'in' && c.last_msg_id &&
+    (c.last_msg_id > (read[c.peer_id] || 0))).length;
+}
+function chatReadMap() { try { return JSON.parse(localStorage.getItem('xy_chat_read') || '{}'); } catch (e) { return {}; } }
+function chatMarkRead(peer) {
+  const m = chatReadMap();
+  const c = _convCache.find(x => x.peer_id === peer);
+  if (c && c.last_msg_id) m[peer] = Math.max(m[peer] || 0, c.last_msg_id);
+  localStorage.setItem('xy_chat_read', JSON.stringify(m));
+}
+function escTime(ts) { return (ts || '').slice(11, 16) || (ts || '').slice(5, 16); }
+
+function renderConvList() {
+  const el = document.getElementById('convList');
+  const read = chatReadMap();
+  // 系统/交易类会话不显示在聊天窗口（避免"快给ta一个评价吧～/交易消息"等刷屏）
+  const SYS_FILTER = ['快给ta一个评价', '交易消息', '闲小蜜', '评价提醒', '系统通知', '订单通知', '官方通知'];
+  let html = '';
+  if (!_convCache.length) html = '<div class="hint" style="padding:10px;font-size:12px">暂无会话</div>';
+  for (const c of _convCache) {
+    const nm0 = (c.buyer_name || c.peer_id || '');
+    if (SYS_FILTER.some(x => nm0.indexOf(x) >= 0)) continue;
+    const unread = (c.last_dir === 'in' && c.last_msg_id && c.last_msg_id > (read[c.peer_id] || 0)) ? 1 : 0;
+    const nm = nm0.slice(0, 12);
+    const prev = (c.last_text || '').replace(/\n/g, ' ').slice(0, 14);
+    html += `<div class="conv-item ${c.peer_id === chatActivePeer ? 'active' : ''}" onclick="chatOpenConv('${esc(c.peer_id).replace(/'/g, "\\'")}')">
+      <div class="cn">${esc(nm)}${unread ? '<span class="cu">●</span>' : ''}</div>
+      <div class="cp">${c.last_dir === 'out' ? '我: ' : ''}${esc(prev || '（无消息）')}</div></div>`;
+  }
+  el.innerHTML = html || '<div class="hint" style="padding:10px;font-size:12px">暂无会话</div>';
+  const cnt = document.getElementById('chatFabCnt');
+  const n = chatTotalUnread();
+  cnt.textContent = n > 99 ? '99+' : n;
+  cnt.style.display = n > 0 ? 'block' : 'none';
+}
+
+async function chatLoadMsgs() {
+  if (!chatActivePeer) return;
+  const ms = await api('/api/messages?peer=' + encodeURIComponent(chatActivePeer) + '&limit=200');
+  renderMsgs(ms || []);
+}
+
+function renderMsgs(list) {
+  const box = document.getElementById('msgList');
+  const pend = _pend[chatActivePeer];
+  const pendText = pend ? pend.text : '';
+  const exist = new Set((list || []).map(m => m.text));
+  const normT = s => String(s || '').replace(/\s+/g, '');
+  // 相邻相同内容折叠为一条（无论收发方向，含平台回显），保证不连续重复出现
+  const items = [];
+  let prev = null;
+  for (const m of list || []) {
+    const t = m.text || '';
+    const nt = normT(t);
+    if (prev && nt === prev.norm) {
+      prev.rep++;
+      prev.time = escTime(m.created_at);
+      continue;
+    }
+    prev = { norm: nt, dir: m.direction, text: t, time: escTime(m.created_at), rep: 1 };
+    items.push(prev);
+  }
+  let html = '';
+  for (const it of items) {
+    const dup = it.rep > 1 ? `<span style="color:#999;font-size:11px" title="相同内容连续出现 ${it.rep} 次，已合并为一条显示">（×${it.rep}）</span>` : '';
+    html += `<div class="msg ${it.dir === 'out' ? 'out' : 'in'}">${esc(it.text)}${dup}<span class="mt">${it.time}</span></div>`;
+  }
+  if (pend && !exist.has(pendText) && Date.now() - pend.t0 < 20000) {
+    html += `<div class="msg out" style="opacity:.55">${esc(pendText)}<span class="mt">发送中…</span></div>`;
+  } else if (pend && !exist.has(pendText)) {
+    html += `<div class="msg out" style="border:1px solid #e74c3c">${esc(pendText)}<span class="mt">可能未送达，请见操作日志</span></div>`;
+    delete _pend[chatActivePeer];
+  }
+  box.innerHTML = html || '<div id="chatEmpty">暂无消息（收到/发出的消息都会显示在这里）</div>';
+  box.scrollTop = box.scrollHeight;
+}
+
+async function chatOpenConv(peer) {
+  chatActivePeer = peer;
+  chatMarkRead(peer);
+  renderConvList();
+  await chatLoadMsgs();
+}
+
+async function chatPoll() {
+  try {
+    // 1) 全局新消息（提示音 + 未读徽标）
+    const nd = await api('/api/messages/newest?after_id=' + chatSeen);
+    if (nd.max_id > chatSeen) {
+      const fresh = (nd.messages || []).filter(m => m.id > chatSeen);
+      chatSeen = nd.max_id;
+      localStorage.setItem('xy_chat_seen', String(chatSeen));
+      if (fresh.some(m => m.direction === 'in') && soundOn('xy_sound_msg')) {
+        playTone('msg');   // 收到买家新消息 → 消息提示音（页面在前台/后台均响）
+      }
+      if (chatOpen && chatActivePeer) await chatLoadMsgs();
+    }
+    // 2) 会话列表（含最新预览/未读）
+    _convCache = await api('/api/conversations');
+    renderConvList();
+    // 3) 当前打开会话若发生 out 完成，清理乐观占位
+    if (chatActivePeer && _pend[chatActivePeer]) {
+      const ms = await api('/api/messages?peer=' + encodeURIComponent(chatActivePeer) + '&limit=5');
+      if ((ms || []).some(m => m.text === _pend[chatActivePeer].text)) {
+        delete _pend[chatActivePeer];
+        await chatLoadMsgs();
+      }
+    }
+  } catch (e) { /* 网络瞬断忽略 */ }
+}
+
+async function chatSend() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!chatActivePeer) { alert('请先在左侧选择一个会话'); return; }
+  if (!text) return;
+  const peer = chatActivePeer;
+  _pend[peer] = { text: text, t0: Date.now() };
+  input.value = '';
+  renderMsgs([]);   // 立即显示乐观气泡（renderMsgs 拉取空列表也会保留 pending）
+  try {
+    await api('/api/messages/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ peer: peer, text: text }) });
+    setTimeout(() => chatLoadMsgs().catch(() => {}), 1200);
+  } catch (e) {
+    delete _pend[peer];
+    alert('发送失败: ' + (e.message || e));
+  }
+}
+
+function initChat() {
+  document.getElementById('chatFab').onclick = () => {
+    chatOpen = !chatOpen;
+    const panel = document.getElementById('chatPanel');
+    panel.classList.toggle('open', chatOpen);
+    if (chatOpen) { chatPoll(); setTimeout(() => { chatPoll(); }, 800); }
+  };
+  document.getElementById('chatClose').onclick = () => {
+    chatOpen = false;
+    document.getElementById('chatPanel').classList.remove('open');
+  };
+  document.getElementById('chatRefresh').onclick = async () => { if (chatActivePeer) await chatLoadMsgs(); chatPoll(); };
+  document.getElementById('chatSend').onclick = chatSend;
+  document.getElementById('chatInput').addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); chatSend(); }
+  });
+  // 图片 / 截图发送
+  document.getElementById('chatImgBtn').onclick = () => document.getElementById('chatImgFile').click();
+  document.getElementById('chatImgFile').onchange = async () => {
+    const f = document.getElementById('chatImgFile');
+    if (f.files && f.files.length) await chatUploadImage(f.files[0], f.files[0].name);
+    f.value = '';
+  };
+  document.getElementById('chatShotBtn').onclick = captureAndSend;
+  chatPoll();
+}
+
+async function chatUploadImage(file, name) {
+  if (!chatActivePeer) { alert('请先在左侧选择一个会话'); return; }
+  const fd = new FormData();
+  fd.append('peer', chatActivePeer);
+  fd.append('file', file, name || 'image.png');
+  try {
+    await api('/api/messages/send-image', { method: 'POST', body: fd });
+    showNotify('✅ 图片已进入发送队列（结果见操作日志）');
+  } catch (e) { showNotify('❌ 图片发送失败：' + (e.message || e)); }
+}
+// ---------- 📷 截图发送：调用 Windows 系统截图工具（框选后 Ctrl+C/Ctrl+V 到输入框发送） ----------
+async function captureAndSend() {
+  if (!chatActivePeer) { alert('请先在左侧选择一个会话'); return; }
+  try {
+    const r = await api('/api/tools/snipping-tool', { method: 'POST' });
+    showNotify((r && r.hint ? r.hint : '已打开系统截图工具') + '；框选后回到本页，在输入框 Ctrl+V 即可发送');
+  } catch (e) {
+    showNotify('❌ ' + ((e && (e.detail || e.message)) || '无法启动系统截图') + '（可用 Win+Shift+S 截图后 Ctrl+V 粘贴到输入框）');
+  }
+}
+// 输入框内粘贴图片（任意系统截图/Ctrl+C 复制的图片）→ 直接发送给当前会话
+function bindChatPaste() {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  input.addEventListener('paste', ev => {
+    if (!chatActivePeer) return;
+    const items = (ev.clipboardData || {}).items || [];
+    for (const it of items) {
+      if (it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+        const f = it.getAsFile();
+        if (f) {
+          ev.preventDefault();
+          chatUploadImage(f, '粘贴图片_' + Date.now() + '.png').catch(() => {});
+          return;
+        }
+      }
+    }
+  });
+}
+bindChatPaste();
+
+// ---------- 前台/静默模式（托盘菜单√联动：页面开=前台，关闭=静默） ----------
+let _uiModeSet = false;
+function markUiFront() {
+  if (_uiModeSet) return;
+  _uiModeSet = true;
+  api('/api/ui/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'front' }) })
+    .catch(() => { _uiModeSet = false; });   // 失败则下次再试
+}
+window.addEventListener('pagehide', () => {
+  try {
+    navigator.sendBeacon('/api/ui/mode',
+      new Blob([JSON.stringify({ mode: 'silent' })], { type: 'application/json' }));
+  } catch (e) { /* 忽略 */ }
+});
+
+// ---------- 启动 ----------
+auth().then(() => refreshAll().catch(() => {})).then(() => markUiFront()).catch(e => { document.getElementById('conn').textContent = '错误: ' + e.message; });
+setInterval(lightPoll, 4000);
+setTimeout(initChat, 1500);
+setInterval(chatPoll, CHAT_POLL_MS);
+</script>
+</body>
+</html>
