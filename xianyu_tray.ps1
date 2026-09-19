@@ -85,13 +85,29 @@ function New-FreePort($reg) {
     return 8080
 }
 function Account-Url($acc) { return "http://127.0.0.1:$($acc.port)" }
+function Test-AccountOwnedByMe($acc) {
+    # 判断端口上的实例是否**确属本账号**：取其 /api/status 里的数据库路径，
+    # 必须与本账号 data_dir\xianyu.db 一致。否则说明该端口被别的副本/实例占用，
+    # 不能当成本账号（避免误停别人进程、或把别人的账号名写进本机注册表）。
+    try {
+        $base = Account-Url $acc
+        $tok = (Invoke-RestMethod -Uri ($base + '/api/auth/token') -TimeoutSec 2).token
+        if (-not $tok) { return $false }
+        $st = Invoke-RestMethod -Uri ($base + '/api/status') -Headers @{ Authorization = "Bearer $tok" } -TimeoutSec 3
+        if ($null -eq $st -or -not $st.db) { return $false }
+        $dataDir = $acc.data_dir
+        if (-not $dataDir) { $dataDir = Join-Path $AccountsRoot "$($acc.id)\data" }
+        $expect = [System.IO.Path]::GetFullPath((Join-Path $dataDir 'xianyu.db'))
+        $actual = [System.IO.Path]::GetFullPath([string]$st.db)
+        return ($actual.TrimEnd('\') -ieq $expect.TrimEnd('\'))
+    } catch { return $false }
+}
 function Is-AccountRunning($acc) {
-    # 端口监听且确认为本助手（能返回 token）才算运行中；仅被其它程序占用 → 视为占用（启动时弹端口选择窗）
+    # 端口监听 **且** 实例确属本账号 → 视为运行中；
+    # 仅被其它程序/其它副本占用时返回 false（启动时会弹端口选择窗，绝不会误认）
     try {
         if (-not [bool](Get-NetTCPConnection -LocalPort $acc.port -State Listen -ErrorAction Stop)) { return $false }
-        $tokUrl = (Account-Url $acc) + '/api/auth/token'
-        $tok = Invoke-RestMethod -Uri $tokUrl -TimeoutSec 3
-        return [bool]$tok.token
+        return (Test-AccountOwnedByMe $acc)
     } catch { return $false }
 }
 function Invoke-Api($acc, $Method, $Path, $Body = $null) {
@@ -505,10 +521,11 @@ function Delete-Account($id) {
     $ans = [System.Windows.Forms.MessageBox]::Show($msg, '删除账号', 'YesNo', 'Warning')
     if ($ans -ne 'Yes') { return }
     # 停止该账号实例（接口退出 + 兜底强杀，确认进程退出后才删数据目录，避免残留）
+    # 仅当端口上确实是"本账号实例"时才强杀，绝不误杀其它副本/程序
     if (Is-AccountRunning $a) { Invoke-Api $a 'POST' '/api/app/exit' | Out-Null }
     for ($i = 0; $i -lt 8; $i++) {
         if (-not (Is-AccountRunning $a)) { break }
-        Stop-PortOwner $a.port
+        if (Test-AccountOwnedByMe $a) { Stop-PortOwner $a.port }
         Start-Sleep -Milliseconds 800
     }
     $script:PendingOps.Remove($id) | Out-Null
