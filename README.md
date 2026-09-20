@@ -102,7 +102,6 @@ app/                    后端
   db.py                 SQLite（WAL）与业务数据访问
   screenshot_util.py    系统级截屏（GDI，纯标准库）
 web/index.html          单文件管理页（原生 JS）
-tools/                  辅助脚本
 sounds/                 提示音目录（自备 .ogg）
 xianyu_tray.ps1         托盘脚本（Windows / PowerShell + WinForms）
 xianyu_tray.vbs         无窗口启动托盘
