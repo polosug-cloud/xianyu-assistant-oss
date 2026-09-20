@@ -169,10 +169,10 @@ def sound_file(kind: str):
     return FileResponse(p, media_type="audio/ogg")
 
 
-# ---------- 捐赠与支持：图片资源 ----------
+# ---------- 内置图片资源 ----------
 @app.get("/api/support/qr")
 def support_qr():
-    """返回「捐赠与支持」弹窗用的图片资源（随程序内置；资源缺失/校验失败时 404）。"""
+    """返回内置图片资源（资源缺失/校验失败时 404）。"""
     data, mime = donation_assets.load_donation_qr()
     if not data:
         raise HTTPException(404, "资源缺失或校验失败")

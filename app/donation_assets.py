@@ -1,21 +1,7 @@
 """闲鱼助手 - 内置图片资源加载
 
-从 assets/donation/ 读取加密分片并在运行期还原出图片；
-分片缺失或校验不通过时返回空（页面与托盘提示资源不可用，不影响其它功能）。
-仅使用标准库，无第三方依赖。
-
-性能：PBKDF2 只派生 32 字节密钥（毫秒级），密钥流用 SHA256 计数器模式生成；
-解码结果按分片状态缓存，接口重复调用不再重算。
-
-文件格式（每个分片 qr.partN.dat，v2）：
-    magic 'XYQ2' | index(1) | iv(16, 仅 part0) | share(32) | mac(16) | payload(...)
-    K   = share0 ^ share1 ^ ... ^ shareN-1
-    key = PBKDF2-SHA256(K, iv, 20000, dklen=32)
-    ks  = SHA256(key || 0x01 || BE32(counter)) 连续拼接（counter 从 0 起）
-    ct  = 明文 XOR ks
-    mac(part0)  = HMAC-SHA256(K, iv || ct)[:16]
-    mac(part i) = HMAC-SHA256(K, [i] || ct_slice)[:16]
-    payload     = ct_slice XOR SHA256(SEED || [i] || share || BE32(counter))
+从内置资源目录读取并在运行期还原出图片；资源缺失或校验不通过时返回空
+（页面与托盘提示资源不可用，不影响其它功能）。仅使用标准库，无第三方依赖。
 """
 import hashlib
 import hmac
@@ -24,14 +10,14 @@ import struct
 from . import config
 
 MAGIC = b"XYQ2"          # 当前格式
-MAGIC_V1 = b"XYQ1"       # 旧格式（兼容历史分片，解码较慢）
+MAGIC_V1 = b"XYQ1"       # 旧格式（解码较慢）
 _PART_TMPL = "qr.part{}.dat"
 _SEED = b"xianyu-assistant-asset-v1"
 _PBKDF2_ITER = 20000
 _KEY_LEN = 32
 _HDR = 4 + 1 + 16 + 32 + 16
 
-_cache = {}              # {分片状态: (bytes, mime)}
+_cache = {}              # {资源状态: (bytes, mime)}
 
 
 def _sha_ks(seed: bytes, n: int) -> bytes:
@@ -79,7 +65,7 @@ def _read_parts(count):
 
 
 def _decode_v2(raws):
-    """当前格式：PBKDF2(32B) + SHA256 计数器密钥流 —— 毫秒级"""
+
     key = b"\x00" * 32
     for r in raws:
         key = _xor(key, r[21:53])
@@ -106,7 +92,7 @@ def _decode_v2(raws):
 
 
 def _decode_v1(raws):
-    """旧格式（仅为兼容历史分片保留；较慢，不建议再生成）"""
+
     key = b"\x00" * 32
     for r in raws:
         key = _xor(key, r[21:53])
@@ -133,7 +119,7 @@ def _decode_v1(raws):
 
 
 def load_donation_qr():
-    """读取全部分片并还原图片 → (image_bytes, mime)；分片不全/校验失败 → (None, None)"""
+    """读取内置资源并还原图片 → (bytes, mime)；缺失/校验失败 → (None, None)"""
     try:
         count = int(getattr(config, "DONATION_PART_COUNT", 5))
         raws, ck = _read_parts(count)

@@ -1,7 +1,7 @@
 ﻿# 闲鱼助手 - 任务栏托盘控制（多账号版，Windows）
 # 用法: powershell -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File xianyu_tray.ps1
 # 菜单：账号管理(新增/勾选登录/删除) / 启动全部助手 / 打开管理页面 / 暂停全部助手 /
-#       提示音开关(按账号) / 运行状态(按账号) / 营收状态(按账号) / 捐赠作者 / 关于 / 退出托盘
+#       提示音开关(按账号) / 运行状态(按账号) / 营收状态(按账号) / 关于 / 退出托盘
 $ErrorActionPreference = 'Continue'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AccountsRoot = Join-Path $Root 'accounts'
@@ -462,9 +462,7 @@ if (Test-Path $AppIco) {
 $NotifyIcon.Text = '闲鱼助手'
 $NotifyIcon.Visible = $true
 
-# 捐赠与支持（弹窗）
-# 收款码解码：C# 实现（毫秒级）。此前用 PowerShell 逐字节循环 + .NET 大 dklen PBKDF2，
-# 实测需 ~84 秒并卡死托盘 UI（弹窗半天不出、右键无响应），故改为编译型实现。
+# 图片资源解码：编译型实现（毫秒级）
 try {
     Add-Type -TypeDefinition @'
 using System;
@@ -507,7 +505,7 @@ public static class XyDonationQr
         for (int i = 0; i < a.Length; i++) a[i] ^= b[i];
     }
 
-    /// <summary>从 assets/donation/qr.partN.dat 还原收款码图片（v1/v2 格式均支持）；失败返回 null</summary>
+    /// <summary>从内置资源还原图片；失败返回 null</summary>
     public static byte[] Decode(string dir)
     {
         try
@@ -598,10 +596,10 @@ public static class XyDonationQr
 }
 '@ -ReferencedAssemblies @('System.dll','System.Core.dll') -ErrorAction Stop
 } catch {
-    Write-Output ("DonationQr 解码类编译失败： " + $_.Exception.Message)
+    Write-Output ("图片资源解码类编译失败： " + $_.Exception.Message)
 }
 function Get-DonationQrBytes {
-    # 优先 C# 实现（毫秒级）；编译不可用时回退纯 PowerShell 实现
+    # 优先编译型实现（毫秒级）；编译不可用时回退纯 PowerShell 实现
     try {
         if ('XyDonationQr' -as [type]) {
             $b = [XyDonationQr]::Decode((Join-Path $Root 'assets\donation'))
@@ -612,8 +610,7 @@ function Get-DonationQrBytes {
     return (Get-DonationQrBytesPs)
 }
 function Get-DonationQrBytesPs {
-    # 纯 PowerShell 回退实现（较慢，仅在 C# 编译不可用时使用）
-    # 从 assets/donation/qr.part*.dat 还原收款码（与 app/donation_assets.py 同算法）。
+    # 纯 PowerShell 回退实现（较慢，仅在编译不可用时使用）。
     try {
         $dir = Join-Path $Root 'assets\donation'
         $n = 5
@@ -749,7 +746,7 @@ function Show-DonateForm {
 
     $tmpQr = Join-Path $env:TEMP ('xy_qr_' + [guid]::NewGuid().ToString('N') + '.png')
     $ok = $false
-    # 方式一（首选）：直接从包内加密分片本地还原 —— 无需任何账号在运行
+    # 方式一（首选）：直接从包内资源本地还原 —— 无需任何账号在运行
     $bytes = Get-DonationQrBytes
     if ($bytes -and $bytes.Length -gt 100) {
         try {
@@ -758,7 +755,7 @@ function Show-DonateForm {
             $ok = $true
         } catch { $ok = $false }
     }
-    # 方式二（兜底）：从正在运行的账号接口取（兼容收款码存在数据库里的旧版本）
+    # 方式二（兜底）：从正在运行的账号接口取
     if (-not $ok) {
         try {
             $acc = Get-Account (Load-Registry) 'acc_main'
@@ -772,7 +769,7 @@ function Show-DonateForm {
         } catch { $ok = $false }
     }
     if (-not $ok) {
-        $lblQr.Text = '资源暂不可用（assets/donation 分片缺失或被修改）'
+        $lblQr.Text = '资源暂不可用'
         $pic.Visible = $false; $f.Height = 220; $btn.Location = New-Object System.Drawing.Point(162, 140)
     }
     $f.Add_FormClosed({ if ($pic.Image) { try { $pic.Image.Dispose() } catch {} }; if (Test-Path $tmpQr) { Remove-Item $tmpQr -Force -ErrorAction SilentlyContinue } })
@@ -1036,7 +1033,7 @@ function Build-Menu {
         if ($rn) { $it.Add_Click([scriptblock]::Create("Revenue-Account '$($a.id)'")) } else { $it.Enabled = $false }
         $mRevenue.DropDownItems.Add($it)
     }
-    # 8) 捐赠作者
+
     $mDonate = New-Object System.Windows.Forms.ToolStripMenuItem('捐赠作者')
     $mDonate.Add_Click({ Show-DonateForm })
     # 9) 关于

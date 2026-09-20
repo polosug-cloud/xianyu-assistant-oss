@@ -101,9 +101,7 @@ app/                    后端
   selfcheck.py          自检任务
   db.py                 SQLite（WAL）与业务数据访问
   screenshot_util.py    系统级截屏（GDI，纯标准库）
-  donation_assets.py    内置图片资源加载
 web/index.html          单文件管理页（原生 JS）
-assets/donation/        内置图片资源（分片存放）
 tools/                  辅助脚本
 sounds/                 提示音目录（自备 .ogg）
 xianyu_tray.ps1         托盘脚本（Windows / PowerShell + WinForms）
@@ -111,14 +109,6 @@ xianyu_tray.vbs         无窗口启动托盘
 start_xianyu.bat        托盘方式启动
 data/                   运行期数据（自动生成，不入库）
 ```
-
----
-
-## 💛 捐赠与支持
-
-如果该软件对你有帮助，请帮忙点亮 Star，或者对作者进行捐赠，感谢。
-
-<small>注意：捐赠仅表达支持，不提供任何额外服务，不要大额捐赠，不要相信本副本以外的其他副本，谢谢。</small>
 
 ---
 

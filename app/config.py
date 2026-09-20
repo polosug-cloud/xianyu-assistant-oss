@@ -31,7 +31,7 @@ ACCOUNT_ID = os.environ.get("XY_ACCOUNT_ID", "")
 SOUND_SYS_FILE = os.environ.get("XY_SOUND_SYS", str(BASE_DIR / "sounds" / "Spring.ogg"))
 SOUND_MSG_FILE = os.environ.get("XY_SOUND_MSG", str(BASE_DIR / "sounds" / "Bubble.ogg"))
 
-# 内置图片资源目录（分片存放，运行期由 app/donation_assets.py 还原）
+# 内置图片资源目录（运行期还原）
 DONATION_DIR = BASE_DIR / "assets" / "donation"
 DONATION_PART_COUNT = 5
 
