@@ -463,43 +463,140 @@ $NotifyIcon.Text = '闲鱼助手'
 $NotifyIcon.Visible = $true
 
 # 捐赠与支持（弹窗）
+function Get-DonationQrBytes {
+    # 直接从 assets/donation/qr.part*.dat 还原收款码（与 app/donation_assets.py 同算法）。
+    # 好处：不依赖"账号正在运行"，任何状态下都能显示二维码。失败返回 $null。
+    try {
+        $dir = Join-Path $Root 'assets\donation'
+        $n = 5
+        $raws = @()
+        for ($i = 0; $i -lt $n; $i++) {
+            $p = Join-Path $dir ('qr.part{0}.dat' -f $i)
+            if (-not (Test-Path $p)) { return $null }
+            $raws += ,([System.IO.File]::ReadAllBytes($p))
+        }
+        foreach ($r in $raws) {
+            if ($r.Length -le 69 -or $r[0] -ne 0x58 -or $r[1] -ne 0x59 -or $r[2] -ne 0x51 -or $r[3] -ne 0x31) { return $null }
+        }
+        if ((($raws | ForEach-Object { [int]$_[4] } | Sort-Object) -join ',') -ne '0,1,2,3,4') { return $null }
+
+        # 1) XOR 分片合并出主密钥
+        $key = New-Object byte[] 32
+        foreach ($r in $raws) { for ($j = 0; $j -lt 32; $j++) { $key[$j] = $key[$j] -bxor $r[21 + $j] } }
+        $iv = New-Object byte[] 16; [Array]::Copy($raws[0], 5, $iv, 0, 16)
+
+        $seed = [System.Text.Encoding]::ASCII.GetBytes('xianyu-assistant-asset-v1')
+        $slices = @{}; $mac0 = $null
+        foreach ($r in $raws) {
+            $idx = [int]$r[4]
+            $share = New-Object byte[] 32; [Array]::Copy($r, 21, $share, 0, 32)
+            $mac = New-Object byte[] 16;   [Array]::Copy($r, 53, $mac, 0, 16)
+            $plen = $r.Length - 69
+            $payload = New-Object byte[] $plen; [Array]::Copy($r, 69, $payload, 0, $plen)
+
+            # keystream = SHA256(seed || index || share || big-endian counter) 连续拼接
+            $ks = New-Object byte[] $plen
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            $off = 0; $c = 0
+            while ($off -lt $plen) {
+                $ms = New-Object System.IO.MemoryStream
+                $ms.Write($seed, 0, $seed.Length)
+                $ms.WriteByte([byte]$idx)
+                $ms.Write($share, 0, 32)
+                $cb = [BitConverter]::GetBytes([uint32]$c); [Array]::Reverse($cb)
+                $ms.Write($cb, 0, 4)
+                $h = $sha.ComputeHash($ms.ToArray()); $ms.Dispose()
+                $take = [Math]::Min($h.Length, $plen - $off)
+                [Array]::Copy($h, 0, $ks, $off, $take)
+                $off += $take; $c++
+            }
+            $sha.Dispose()
+
+            $sl = New-Object byte[] $plen
+            for ($j = 0; $j -lt $plen; $j++) { $sl[$j] = $payload[$j] -bxor $ks[$j] }
+
+            if ($idx -eq 0) { $mac0 = $mac }
+            else {
+                $hm = [System.Security.Cryptography.HMACSHA256]::new($key)
+                $ms2 = New-Object System.IO.MemoryStream
+                $ms2.WriteByte([byte]$idx); $ms2.Write($sl, 0, $sl.Length)
+                $exp = $hm.ComputeHash($ms2.ToArray()); $hm.Dispose(); $ms2.Dispose()
+                for ($j = 0; $j -lt 16; $j++) { if ($exp[$j] -ne $mac[$j]) { return $null } }
+            }
+            $slices[$idx] = $sl
+        }
+
+        # 2) 拼接密文并校验整体 HMAC
+        $msAll = New-Object System.IO.MemoryStream
+        for ($i = 0; $i -lt $n; $i++) { $msAll.Write($slices[$i], 0, $slices[$i].Length) }
+        $ct = $msAll.ToArray(); $msAll.Dispose()
+        $hm0 = [System.Security.Cryptography.HMACSHA256]::new($key)
+        $ms3 = New-Object System.IO.MemoryStream
+        $ms3.WriteByte(0); $ms3.Write($iv, 0, 16); $ms3.Write($ct, 0, $ct.Length)
+        $exp0 = $hm0.ComputeHash($ms3.ToArray()); $hm0.Dispose(); $ms3.Dispose()
+        for ($j = 0; $j -lt 16; $j++) { if ($exp0[$j] -ne $mac0[$j]) { return $null } }
+
+        # 3) PBKDF2-SHA256 流解密
+        $kdf = [System.Security.Cryptography.Rfc2898DeriveBytes]::new($key, $iv, 20000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+        $dk = $kdf.GetBytes($ct.Length); $kdf.Dispose()
+        $plain = New-Object byte[] $ct.Length
+        for ($j = 0; $j -lt $ct.Length; $j++) { $plain[$j] = $ct[$j] -bxor $dk[$j] }
+        return $plain
+    } catch { return $null }
+}
 function Show-DonateForm {
     $f = New-Object System.Windows.Forms.Form
-    $f.Text = '捐赠与支持'; $f.Size = New-Object System.Drawing.Size(400, 430)
+    $f.Text = '捐赠与支持'; $f.Size = New-Object System.Drawing.Size(404, 412)
     $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
     $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.ShowInTaskbar = $false; $f.BackColor = [System.Drawing.Color]::White
     $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Location = New-Object System.Drawing.Point(20, 12); $lbl.Size = New-Object System.Drawing.Size(350, 64)
-    $lbl.Text = "如果该软件对你有帮助，请帮忙点亮 Star，`n或者对作者进行捐赠，感谢。`n`n（Star：https://github.com/polosug-cloud/xianyu-assistant-oss ）"
-    $lbl.Font = New-Object System.Drawing.Font('Microsoft YaHei', 10)
+    $lbl.Location = New-Object System.Drawing.Point(20, 12); $lbl.Size = New-Object System.Drawing.Size(360, 56)
+    $lbl.Text = "如果该软件对你有帮助，请帮忙点亮 Star，或者对作者进行捐赠，感谢。`nStar：https://github.com/polosug-cloud/xianyu-assistant-oss"
+    $lbl.Font = New-Object System.Drawing.Font('Microsoft YaHei', 9.5)
     $lblNote = New-Object System.Windows.Forms.Label
-    $lblNote.Location = New-Object System.Drawing.Point(20, 78); $lblNote.Size = New-Object System.Drawing.Size(350, 40)
+    $lblNote.Location = New-Object System.Drawing.Point(20, 70); $lblNote.Size = New-Object System.Drawing.Size(360, 34)
     $lblNote.Text = "注意：捐赠仅表达支持，不提供任何额外服务，不要大额捐赠，`n不要相信本副本以外的其他副本，谢谢。"
     $lblNote.Font = New-Object System.Drawing.Font('Microsoft YaHei', 8)
     $lblNote.ForeColor = [System.Drawing.Color]::Gray
     $lblQr = New-Object System.Windows.Forms.Label
-    $lblQr.Location = New-Object System.Drawing.Point(20, 122); $lblQr.Size = New-Object System.Drawing.Size(350, 22)
-    $lblQr.Text = '扫码支持作者:'; $lblQr.Font = New-Object System.Drawing.Font('Microsoft YaHei', 9.5)
+    $lblQr.Location = New-Object System.Drawing.Point(20, 108); $lblQr.Size = New-Object System.Drawing.Size(360, 20)
+    $lblQr.Text = '扫码支持作者:'; $lblQr.Font = New-Object System.Drawing.Font('Microsoft YaHei', 9)
     $pic = New-Object System.Windows.Forms.PictureBox
-    $pic.Location = New-Object System.Drawing.Point(100, 150); $pic.Size = New-Object System.Drawing.Size(190, 150)
-    $pic.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom; $pic.BackColor = [System.Drawing.Color]::WhiteSmoke
+    $pic.Location = New-Object System.Drawing.Point(107, 130); $pic.Size = New-Object System.Drawing.Size(190, 190)
+    $pic.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom; $pic.BackColor = [System.Drawing.Color]::White
     $pic.BorderStyle = 'FixedSingle'
     $btn = New-Object System.Windows.Forms.Button
-    $btn.Location = New-Object System.Drawing.Point(160, 315); $btn.Size = New-Object System.Drawing.Size(80, 30)
+    $btn.Location = New-Object System.Drawing.Point(162, 330); $btn.Size = New-Object System.Drawing.Size(80, 28)
     $btn.Text = '关闭'; $btn.Add_Click({ $f.Close() })
     $f.Controls.Add($lbl); $f.Controls.Add($lblNote); $f.Controls.Add($lblQr); $f.Controls.Add($pic); $f.Controls.Add($btn)
+
     $tmpQr = Join-Path $env:TEMP ('xy_qr_' + [guid]::NewGuid().ToString('N') + '.png')
-    try {
-        $acc = Get-Account (Load-Registry) 'acc_main'
-        if ($acc -and (Is-AccountRunning $acc)) {
-            $dBase = Account-Url $acc
-            $tok = (Invoke-RestMethod -Uri ($dBase + '/api/auth/token') -TimeoutSec 3).token
-            Invoke-WebRequest -Uri ($dBase + '/api/support/qr') -Headers @{ Authorization = "Bearer $tok" } -OutFile $tmpQr -TimeoutSec 8 -ErrorAction Stop
+    $ok = $false
+    # 方式一（首选）：直接从包内加密分片本地还原 —— 无需任何账号在运行
+    $bytes = Get-DonationQrBytes
+    if ($bytes -and $bytes.Length -gt 100) {
+        try {
+            [System.IO.File]::WriteAllBytes($tmpQr, $bytes)
             $pic.Image = [System.Drawing.Image]::FromFile($tmpQr)
-        } else { throw 'no-main' }
-    } catch {
-        $lblQr.Text = '资源暂不可用'
-        $pic.Visible = $false; $f.Height = 250; $btn.Location = New-Object System.Drawing.Point(160, 180)
+            $ok = $true
+        } catch { $ok = $false }
+    }
+    # 方式二（兜底）：从正在运行的账号接口取（兼容收款码存在数据库里的旧版本）
+    if (-not $ok) {
+        try {
+            $acc = Get-Account (Load-Registry) 'acc_main'
+            if ($acc -and (Is-AccountRunning $acc)) {
+                $dBase = Account-Url $acc
+                $tok = (Invoke-RestMethod -Uri ($dBase + '/api/auth/token') -TimeoutSec 3).token
+                Invoke-WebRequest -Uri ($dBase + '/api/support/qr') -Headers @{ Authorization = "Bearer $tok" } -OutFile $tmpQr -TimeoutSec 8 -ErrorAction Stop
+                $pic.Image = [System.Drawing.Image]::FromFile($tmpQr)
+                $ok = $true
+            }
+        } catch { $ok = $false }
+    }
+    if (-not $ok) {
+        $lblQr.Text = '资源暂不可用（assets/donation 分片缺失或被修改）'
+        $pic.Visible = $false; $f.Height = 220; $btn.Location = New-Object System.Drawing.Point(162, 140)
     }
     $f.Add_FormClosed({ if ($pic.Image) { try { $pic.Image.Dispose() } catch {} }; if (Test-Path $tmpQr) { Remove-Item $tmpQr -Force -ErrorAction SilentlyContinue } })
     $f.ShowDialog() | Out-Null
