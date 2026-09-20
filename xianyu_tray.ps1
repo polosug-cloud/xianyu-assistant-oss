@@ -463,9 +463,157 @@ $NotifyIcon.Text = '闲鱼助手'
 $NotifyIcon.Visible = $true
 
 # 捐赠与支持（弹窗）
+# 收款码解码：C# 实现（毫秒级）。此前用 PowerShell 逐字节循环 + .NET 大 dklen PBKDF2，
+# 实测需 ~84 秒并卡死托盘 UI（弹窗半天不出、右键无响应），故改为编译型实现。
+try {
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+public static class XyDonationQr
+{
+    static readonly byte[] Seed = Encoding.ASCII.GetBytes("xianyu-assistant-asset-v1");
+    const int Parts = 5;
+    const int Header = 4 + 1 + 16 + 32 + 16;
+    const int Iter = 20000;
+
+    static byte[] ShaKs(byte[] seed, int n)
+    {
+        var outb = new byte[n];
+        int off = 0; uint c = 0;
+        using (var sha = SHA256.Create())
+        {
+            while (off < n)
+            {
+                var buf = new byte[seed.Length + 4];
+                Buffer.BlockCopy(seed, 0, buf, 0, seed.Length);
+                buf[seed.Length]     = (byte)(c >> 24);
+                buf[seed.Length + 1] = (byte)(c >> 16);
+                buf[seed.Length + 2] = (byte)(c >> 8);
+                buf[seed.Length + 3] = (byte)c;
+                var h = sha.ComputeHash(buf);
+                int take = Math.Min(h.Length, n - off);
+                Buffer.BlockCopy(h, 0, outb, off, take);
+                off += take; c++;
+            }
+        }
+        return outb;
+    }
+
+    static void XorInPlace(byte[] a, byte[] b)
+    {
+        for (int i = 0; i < a.Length; i++) a[i] ^= b[i];
+    }
+
+    /// <summary>从 assets/donation/qr.partN.dat 还原收款码图片（v1/v2 格式均支持）；失败返回 null</summary>
+    public static byte[] Decode(string dir)
+    {
+        try
+        {
+            var raws = new byte[Parts][];
+            for (int i = 0; i < Parts; i++)
+            {
+                string p = Path.Combine(dir, "qr.part" + i + ".dat");
+                if (!File.Exists(p)) return null;
+                raws[i] = File.ReadAllBytes(p);
+                if (raws[i].Length <= Header) return null;
+                if (raws[i][0] != (byte)'X' || raws[i][1] != (byte)'Y' || raws[i][2] != (byte)'Q') return null;
+                if (raws[i][4] != (byte)i) return null;
+            }
+            bool v2 = raws[0][3] == (byte)'2';
+            bool v1 = raws[0][3] == (byte)'1';
+            if (!v2 && !v1) return null;
+
+            var key = new byte[32];
+            for (int i = 0; i < Parts; i++)
+                for (int j = 0; j < 32; j++) key[j] ^= raws[i][21 + j];
+            var iv = new byte[16];
+            Buffer.BlockCopy(raws[0], 5, iv, 0, 16);
+
+            var slices = new byte[Parts][];
+            byte[] mac0 = null;
+            for (int i = 0; i < Parts; i++)
+            {
+                var r = raws[i];
+                int plen = r.Length - 69;
+                var share = new byte[32]; Buffer.BlockCopy(r, 21, share, 0, 32);
+                var mac = new byte[16]; Buffer.BlockCopy(r, 53, mac, 0, 16);
+                var payload = new byte[plen]; Buffer.BlockCopy(r, 69, payload, 0, plen);
+                var seed2 = new byte[Seed.Length + 1 + 32];
+                Buffer.BlockCopy(Seed, 0, seed2, 0, Seed.Length);
+                seed2[Seed.Length] = r[4];
+                Buffer.BlockCopy(share, 0, seed2, Seed.Length + 1, 32);
+                XorInPlace(payload, ShaKs(seed2, plen));
+                if (i == 0) mac0 = mac;
+                else
+                {
+                    using (var hm = new HMACSHA256(key))
+                    {
+                        var msg = new byte[1 + plen];
+                        msg[0] = r[4];
+                        Buffer.BlockCopy(payload, 0, msg, 1, plen);
+                        var exp = hm.ComputeHash(msg);
+                        for (int j = 0; j < 16; j++) if (exp[j] != mac[j]) return null;
+                    }
+                }
+                slices[i] = payload;
+            }
+
+            int total = 0;
+            for (int i = 0; i < Parts; i++) total += slices[i].Length;
+            var ct = new byte[total];
+            int o = 0;
+            for (int i = 0; i < Parts; i++) { Buffer.BlockCopy(slices[i], 0, ct, o, slices[i].Length); o += slices[i].Length; }
+
+            using (var hm = new HMACSHA256(key))
+            {
+                var msg = new byte[(v2 ? 16 : 17) + ct.Length];
+                int mo = 0;
+                if (!v2) msg[mo++] = 0;
+                Buffer.BlockCopy(iv, 0, msg, mo, 16); mo += 16;
+                Buffer.BlockCopy(ct, 0, msg, mo, ct.Length);
+                var exp = hm.ComputeHash(msg);
+                for (int j = 0; j < 16; j++) if (exp[j] != mac0[j]) return null;
+            }
+
+            var kdf = new Rfc2898DeriveBytes(key, iv, Iter, HashAlgorithmName.SHA256);
+            if (v2)
+            {
+                var dk = kdf.GetBytes(32);
+                var ksSeed = new byte[33];
+                Buffer.BlockCopy(dk, 0, ksSeed, 0, 32);
+                ksSeed[32] = 1;
+                XorInPlace(ct, ShaKs(ksSeed, ct.Length));
+            }
+            else
+            {
+                XorInPlace(ct, kdf.GetBytes(ct.Length));
+            }
+            return ct;
+        }
+        catch { return null; }
+    }
+}
+'@ -ReferencedAssemblies @('System.dll','System.Core.dll') -ErrorAction Stop
+} catch {
+    Write-Output ("DonationQr 解码类编译失败： " + $_.Exception.Message)
+}
 function Get-DonationQrBytes {
-    # 直接从 assets/donation/qr.part*.dat 还原收款码（与 app/donation_assets.py 同算法）。
-    # 好处：不依赖"账号正在运行"，任何状态下都能显示二维码。失败返回 $null。
+    # 优先 C# 实现（毫秒级）；编译不可用时回退纯 PowerShell 实现
+    try {
+        if ('XyDonationQr' -as [type]) {
+            $b = [XyDonationQr]::Decode((Join-Path $Root 'assets\donation'))
+            if ($b -and $b.Length -gt 100) { return $b }
+            return $null
+        }
+    } catch {}
+    return (Get-DonationQrBytesPs)
+}
+function Get-DonationQrBytesPs {
+    # 纯 PowerShell 回退实现（较慢，仅在 C# 编译不可用时使用）
+    # 从 assets/donation/qr.part*.dat 还原收款码（与 app/donation_assets.py 同算法）。
     try {
         $dir = Join-Path $Root 'assets\donation'
         $n = 5
@@ -476,7 +624,7 @@ function Get-DonationQrBytes {
             $raws += ,([System.IO.File]::ReadAllBytes($p))
         }
         foreach ($r in $raws) {
-            if ($r.Length -le 69 -or $r[0] -ne 0x58 -or $r[1] -ne 0x59 -or $r[2] -ne 0x51 -or $r[3] -ne 0x31) { return $null }
+            if ($r.Length -le 69 -or $r[0] -ne 0x58 -or $r[1] -ne 0x59 -or $r[2] -ne 0x51 -or ($r[3] -ne 0x31 -and $r[3] -ne 0x32)) { return $null }
         }
         if ((($raws | ForEach-Object { [int]$_[4] } | Sort-Object) -join ',') -ne '0,1,2,3,4') { return $null }
 
@@ -536,11 +684,33 @@ function Get-DonationQrBytes {
         $exp0 = $hm0.ComputeHash($ms3.ToArray()); $hm0.Dispose(); $ms3.Dispose()
         for ($j = 0; $j -lt 16; $j++) { if ($exp0[$j] -ne $mac0[$j]) { return $null } }
 
-        # 3) PBKDF2-SHA256 流解密
+        # 3) 校验通过后解密（v2：PBKDF2 仅派生 32 字节密钥 + SHA256 计数器密钥流；v1：派生整段）
         $kdf = [System.Security.Cryptography.Rfc2898DeriveBytes]::new($key, $iv, 20000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-        $dk = $kdf.GetBytes($ct.Length); $kdf.Dispose()
         $plain = New-Object byte[] $ct.Length
-        for ($j = 0; $j -lt $ct.Length; $j++) { $plain[$j] = $ct[$j] -bxor $dk[$j] }
+        if ($raws[0][3] -eq 0x32) {
+            $dk = $kdf.GetBytes(32); $kdf.Dispose()
+            $ksSeed = New-Object byte[] 33
+            [Array]::Copy($dk, 0, $ksSeed, 0, 32); $ksSeed[32] = 1
+            # keystream = SHA256(ksSeed || BE32(counter))
+            $ks = New-Object byte[] $ct.Length
+            $sha2 = [System.Security.Cryptography.SHA256]::Create()
+            $off2 = 0; $c2 = 0
+            while ($off2 -lt $ct.Length) {
+                $ms5 = New-Object System.IO.MemoryStream
+                $ms5.Write($ksSeed, 0, 33)
+                $cb2 = [BitConverter]::GetBytes([uint32]$c2); [Array]::Reverse($cb2)
+                $ms5.Write($cb2, 0, 4)
+                $h2 = $sha2.ComputeHash($ms5.ToArray()); $ms5.Dispose()
+                $take2 = [Math]::Min($h2.Length, $ct.Length - $off2)
+                [Array]::Copy($h2, 0, $ks, $off2, $take2)
+                $off2 += $take2; $c2++
+            }
+            $sha2.Dispose()
+            for ($j = 0; $j -lt $ct.Length; $j++) { $plain[$j] = $ct[$j] -bxor $ks[$j] }
+        } else {
+            $dk = $kdf.GetBytes($ct.Length); $kdf.Dispose()
+            for ($j = 0; $j -lt $ct.Length; $j++) { $plain[$j] = $ct[$j] -bxor $dk[$j] }
+        }
         return $plain
     } catch { return $null }
 }
