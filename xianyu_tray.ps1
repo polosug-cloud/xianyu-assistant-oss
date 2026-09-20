@@ -716,29 +716,36 @@ function Get-DonationQrBytesPs {
 }
 function Show-DonateForm {
     $f = New-Object System.Windows.Forms.Form
-    $f.Text = '捐赠与支持'; $f.Size = New-Object System.Drawing.Size(404, 412)
+    $f.Text = '捐赠与支持'; $f.Size = New-Object System.Drawing.Size(420, 452)
     $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
     $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.ShowInTaskbar = $false; $f.BackColor = [System.Drawing.Color]::White
     $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Location = New-Object System.Drawing.Point(20, 12); $lbl.Size = New-Object System.Drawing.Size(360, 56)
-    $lbl.Text = "如果该软件对你有帮助，请帮忙点亮 Star，或者对作者进行捐赠，感谢。`nStar：https://github.com/polosug-cloud/xianyu-assistant-oss"
+    $lbl.Location = New-Object System.Drawing.Point(20, 12); $lbl.Size = New-Object System.Drawing.Size(370, 40)
+    $lbl.Text = "如果该软件对你有帮助，请帮忙点亮 Star，或者对作者进行捐赠，感谢。"
     $lbl.Font = New-Object System.Drawing.Font('Microsoft YaHei', 9.5)
+    # 开源地址：单独一行可点击链接（短写法 + 点击直接打开，避免长 URL 被截断）
+    $lnk = New-Object System.Windows.Forms.LinkLabel
+    $lnk.Location = New-Object System.Drawing.Point(20, 56); $lnk.Size = New-Object System.Drawing.Size(370, 18)
+    $lnk.Text = 'github.com/polosug-cloud/xianyu-assistant-oss'
+    $lnk.Font = New-Object System.Drawing.Font('Microsoft YaHei', 8)
+    $lnk.LinkColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
+    $lnk.Add_Click({ try { Start-Process 'https://github.com/polosug-cloud/xianyu-assistant-oss' } catch {} })
     $lblNote = New-Object System.Windows.Forms.Label
-    $lblNote.Location = New-Object System.Drawing.Point(20, 70); $lblNote.Size = New-Object System.Drawing.Size(360, 34)
+    $lblNote.Location = New-Object System.Drawing.Point(20, 78); $lblNote.Size = New-Object System.Drawing.Size(370, 32)
     $lblNote.Text = "注意：捐赠仅表达支持，不提供任何额外服务，不要大额捐赠，`n不要相信本副本以外的其他副本，谢谢。"
     $lblNote.Font = New-Object System.Drawing.Font('Microsoft YaHei', 8)
     $lblNote.ForeColor = [System.Drawing.Color]::Gray
     $lblQr = New-Object System.Windows.Forms.Label
-    $lblQr.Location = New-Object System.Drawing.Point(20, 108); $lblQr.Size = New-Object System.Drawing.Size(360, 20)
+    $lblQr.Location = New-Object System.Drawing.Point(20, 112); $lblQr.Size = New-Object System.Drawing.Size(370, 20)
     $lblQr.Text = '扫码支持作者:'; $lblQr.Font = New-Object System.Drawing.Font('Microsoft YaHei', 9)
     $pic = New-Object System.Windows.Forms.PictureBox
-    $pic.Location = New-Object System.Drawing.Point(107, 130); $pic.Size = New-Object System.Drawing.Size(190, 190)
+    $pic.Location = New-Object System.Drawing.Point(110, 134); $pic.Size = New-Object System.Drawing.Size(190, 190)
     $pic.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom; $pic.BackColor = [System.Drawing.Color]::White
     $pic.BorderStyle = 'FixedSingle'
     $btn = New-Object System.Windows.Forms.Button
-    $btn.Location = New-Object System.Drawing.Point(162, 330); $btn.Size = New-Object System.Drawing.Size(80, 28)
+    $btn.Location = New-Object System.Drawing.Point(165, 334); $btn.Size = New-Object System.Drawing.Size(80, 28)
     $btn.Text = '关闭'; $btn.Add_Click({ $f.Close() })
-    $f.Controls.Add($lbl); $f.Controls.Add($lblNote); $f.Controls.Add($lblQr); $f.Controls.Add($pic); $f.Controls.Add($btn)
+    $f.Controls.Add($lbl); $f.Controls.Add($lnk); $f.Controls.Add($lblNote); $f.Controls.Add($lblQr); $f.Controls.Add($pic); $f.Controls.Add($btn)
 
     $tmpQr = Join-Path $env:TEMP ('xy_qr_' + [guid]::NewGuid().ToString('N') + '.png')
     $ok = $false
