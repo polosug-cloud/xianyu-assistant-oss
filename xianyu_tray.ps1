@@ -46,21 +46,29 @@ function Load-Registry {
     return $reg
 }
 function Save-Registry($reg) {
+    # 过滤 null/非法条目，避免注册表出现空账号导致菜单出错或卡顿
+    $reg.accounts = @(@($reg.accounts) | Where-Object { $null -ne $_ -and $_.id })
     $reg | ConvertTo-Json -Depth 5 | Set-Content -Path $RegPath -Encoding UTF8
 }
-function Get-Accounts($reg) { return @($reg.accounts) }
+function Get-Accounts($reg) {
+    # 同样过滤 null/非法条目（历史文件可能残留）
+    return @(@($reg.accounts) | Where-Object { $null -ne $_ -and $_.id })
+}
 function Get-Account($reg, $id) {
-    foreach ($a in @($reg.accounts)) { if ($a.id -eq $id) { return $a } }
+    foreach ($a in @($reg.accounts)) { if ($null -ne $a -and $a.id -eq $id) { return $a } }
     return $null
 }
 function Save-Account($reg, $acc) {
-    $list = @($reg.accounts)
-    for ($i = 0; $i -lt $list.Count; $i++) { if ($list[$i].id -eq $acc.id) { $list[$i] = $acc } }
+    if ($null -eq $acc -or -not $acc.id) { return }
+    $list = @(@($reg.accounts) | Where-Object { $null -ne $_ -and $_.id })
+    $found = $false
+    for ($i = 0; $i -lt $list.Count; $i++) { if ($list[$i].id -eq $acc.id) { $list[$i] = $acc; $found = $true } }
+    if (-not $found) { $list = @($list) + $acc }
     $reg.accounts = $list
     Save-Registry $reg
 }
 function Remove-Account($reg, $id) {
-    $list = @($reg.accounts) | Where-Object { $_.id -ne $id }
+    $list = @($reg.accounts) | Where-Object { $null -ne $_ -and $_.id -and $_.id -ne $id }
     $reg.accounts = $list
     Save-Registry $reg
 }
