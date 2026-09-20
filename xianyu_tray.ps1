@@ -66,9 +66,31 @@ function Remove-Account($reg, $id) {
 }
 
 # ---------- 工具 ----------
-function Is-PortFree($port) {
-    try { return -not [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop) } catch { return $true }
+# 端口探测：缓存监听端口表（枚举一次约 3ms，远快于逐个 Get-NetTCPConnection 的 ~150ms），
+# 缓存 1 秒，避免菜单构建/轮询时反复查询造成卡顿。
+$script:ListenCache = @{ ts = [datetime]::MinValue; ports = @() }
+function Get-ListeningPortSet {
+    $now = Get-Date
+    if (($now - $script:ListenCache.ts).TotalSeconds -ge 1 -or $script:ListenCache.ports.Count -eq 0) {
+        try {
+            $set = New-Object 'System.Collections.Generic.HashSet[int]'
+            foreach ($ep in [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) {
+                $null = $set.Add([int]$ep.Port)
+            }
+            $script:ListenCache = @{ ts = $now; ports = $set }
+        } catch {
+            # 枚举失败时退回逐个查询（慢但可用）
+            $script:ListenCache = @{ ts = $now; ports = $null }
+        }
+    }
+    return $script:ListenCache.ports
 }
+function Test-PortListening($port) {
+    $set = Get-ListeningPortSet
+    if ($null -ne $set) { return $set.Contains([int]$port) }
+    try { return [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop) } catch { return $false }
+}
+function Is-PortFree($port) { return -not (Test-PortListening $port) }
 function Get-FreePort($from) {
     $p = $from
     while (-not (Is-PortFree $p)) { $p++ }
@@ -86,27 +108,37 @@ function New-FreePort($reg) {
 }
 function Account-Url($acc) { return "http://127.0.0.1:$($acc.port)" }
 function Test-AccountOwnedByMe($acc) {
-    # 判断端口上的实例是否**确属本账号**：取其 /api/status 里的数据库路径，
-    # 必须与本账号 data_dir\xianyu.db 一致。否则说明该端口被别的副本/实例占用，
-    # 不能当成本账号（避免误停别人进程、或把别人的账号名写进本机注册表）。
+    # 判断端口上的实例是否**确属本账号**，避免误认别的副本（误停别人进程、或把别人账号名写进注册表）。
+    # 判定顺序（全部为纯 ASCII 比较，规避中文路径经 HTTP/JSON 到 PowerShell 5.1 时的编码问题）：
+    #   1) /api/status.account_id  == 本账号 id（托盘启动时会注入 XY_ACCOUNT_ID 环境变量）
+    #   2) /api/status.db_b64      == 本地按 UTF-8 计算并 base64 后的数据库绝对路径
+    #   3) 兜底：直接比较路径（两条记录都来自同一接口，仅作最后尝试）
     try {
         $base = Account-Url $acc
         $tok = (Invoke-RestMethod -Uri ($base + '/api/auth/token') -TimeoutSec 2).token
         if (-not $tok) { return $false }
         $st = Invoke-RestMethod -Uri ($base + '/api/status') -Headers @{ Authorization = "Bearer $tok" } -TimeoutSec 3
-        if ($null -eq $st -or -not $st.db) { return $false }
+        if ($null -eq $st) { return $false }
+        if ($st.account_id -and ([string]$st.account_id).Trim() -eq ([string]$acc.id).Trim()) { return $true }
         $dataDir = $acc.data_dir
         if (-not $dataDir) { $dataDir = Join-Path $AccountsRoot "$($acc.id)\data" }
-        $expect = [System.IO.Path]::GetFullPath((Join-Path $dataDir 'xianyu.db'))
-        $actual = [System.IO.Path]::GetFullPath([string]$st.db)
-        return ($actual.TrimEnd('\') -ieq $expect.TrimEnd('\'))
+        $expectPath = [System.IO.Path]::GetFullPath((Join-Path $dataDir 'xianyu.db'))
+        if ($st.db_b64) {
+            $expectB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($expectPath))
+            return ([string]$st.db_b64 -eq $expectB64)
+        }
+        if ($st.db) {
+            $actual = [System.IO.Path]::GetFullPath([string]$st.db)
+            return ($actual.TrimEnd('\') -ieq $expectPath.TrimEnd('\'))
+        }
+        return $false
     } catch { return $false }
 }
 function Is-AccountRunning($acc) {
     # 端口监听 **且** 实例确属本账号 → 视为运行中；
     # 仅被其它程序/其它副本占用时返回 false（启动时会弹端口选择窗，绝不会误认）
     try {
-        if (-not [bool](Get-NetTCPConnection -LocalPort $acc.port -State Listen -ErrorAction Stop)) { return $false }
+        if (-not (Test-PortListening $acc.port)) { return $false }
         return (Test-AccountOwnedByMe $acc)
     } catch { return $false }
 }
@@ -123,8 +155,10 @@ function Invoke-Api($acc, $Method, $Path, $Body = $null) {
 function Show-Balloon($Title, $Text) {
     try { $script:NotifyIcon.ShowBalloonTip(3000, $Title, $Text, [System.Windows.Forms.ToolTipIcon]::Info) } catch {}
 }
-function Get-AccountDisplayName($acc) {
-    if (Is-AccountRunning $acc) {
+function Get-AccountDisplayName($acc, $runningKnown = $null) {
+    # $runningKnown 传入已知运行状态时不再重复探测（菜单构建时避免重复请求造成卡顿）
+    $running = if ($null -ne $runningKnown) { [bool]$runningKnown } else { Is-AccountRunning $acc }
+    if ($running) {
         $a = Invoke-Api $acc 'GET' '/api/account'
         if ($null -ne $a -and $a.name) {
             if ($acc.name -ne $a.name) {
@@ -159,8 +193,15 @@ function Init-OpTimer {
             $elapsed = ($now - $op.started).TotalSeconds
             $wantRun = $op.action -eq 'start'
             $done = $false
+            $listening = Test-PortListening $a.port
             if ($running -eq $wantRun) { $done = $true }
-            elseif ($elapsed -gt 30) { $done = $true }
+            elseif ($op.action -eq 'start' -and -not $running -and $listening -and $elapsed -gt 5) {
+                # 端口已在监听但身份校验尚未通过（例如实例刚起、接口还没准备好）：
+                # 也算启动成功，确保新账号一定能把管理页弹出来
+                $done = $true
+                $running = $true
+            }
+            elseif ($elapsed -gt 60) { $done = $true }
             elseif ($op.action -eq 'stop' -and $running -and $elapsed -gt 8) {
                 Stop-PortOwner $a.port    # 退出接口卡住时按端口属主强杀一次
             }
@@ -168,9 +209,10 @@ function Init-OpTimer {
                 $script:PendingOps.Remove($id)
                 $a.checked = $running
                 Save-Account (Load-Registry) $a
-                if ($op.openPage -and $running) { Start-Process (Account-Url $a) }
+                # 打开管理页：账号在运行，或端口已监听（后者保证新账号能弹出扫码页）
+                if ($op.openPage -and ($running -or $listening)) { Start-Process (Account-Url $a) }
                 $st = if ($running) { '已启动' } else { '已停止' }
-                Show-Balloon '闲鱼助手' "账号「$(Get-AccountDisplayName $a)」（端口 $($a.port)）$st"
+                Show-Balloon '闲鱼助手' "账号「$(Get-AccountDisplayName $a $running)」（端口 $($a.port)）$st"
                 Refresh-Menu
             }
         }
@@ -226,7 +268,7 @@ function Start-AccountInstance($acc, [bool]$OpenPage = $false) {
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
     # 环境（临时设置后恢复）
     $saved = @{}
-    @('PYTHONPATH','PLAYWRIGHT_BROWSERS_PATH','XY_BROWSERS_DIR','XY_DATA_DIR','XY_LOG_DIR','XY_SOUND_SYS','XY_SOUND_MSG','XY_PORT','PYTHONIOENCODING') | ForEach-Object { $saved[$_] = [Environment]::GetEnvironmentVariable($_) }
+    @('PYTHONPATH','PLAYWRIGHT_BROWSERS_PATH','XY_BROWSERS_DIR','XY_DATA_DIR','XY_LOG_DIR','XY_SOUND_SYS','XY_SOUND_MSG','XY_PORT','XY_ACCOUNT_ID','PYTHONIOENCODING') | ForEach-Object { $saved[$_] = [Environment]::GetEnvironmentVariable($_) }
     [Environment]::SetEnvironmentVariable('PYTHONPATH', $BaseEnv.PYTHONPATH)
     [Environment]::SetEnvironmentVariable('PLAYWRIGHT_BROWSERS_PATH', $BaseEnv.PLAYWRIGHT_BROWSERS_PATH)
     [Environment]::SetEnvironmentVariable('XY_BROWSERS_DIR', $BaseEnv.XY_BROWSERS_DIR)
@@ -235,6 +277,8 @@ function Start-AccountInstance($acc, [bool]$OpenPage = $false) {
     [Environment]::SetEnvironmentVariable('XY_SOUND_SYS', $BaseEnv.XY_SOUND_SYS)
     [Environment]::SetEnvironmentVariable('XY_SOUND_MSG', $BaseEnv.XY_SOUND_MSG)
     [Environment]::SetEnvironmentVariable('XY_PORT', "$($acc.port)")
+    # 账号身份标识（纯 ASCII）：实例会在 /api/status 里回报，供托盘校验"这实例是不是我的账号"
+    [Environment]::SetEnvironmentVariable('XY_ACCOUNT_ID', "$($acc.id)")
     [Environment]::SetEnvironmentVariable('PYTHONIOENCODING', 'utf-8')
     try {
         Start-Process -FilePath $Py -ArgumentList '-m','app.main' -WorkingDirectory $Root -WindowStyle Hidden
@@ -573,7 +617,7 @@ function Build-Menu {
     $nameMap = @{}; $runMap = @{}
     foreach ($a in $accs) {
         $runMap[$a.id] = Is-AccountRunning $a
-        $nameMap[$a.id] = Get-AccountDisplayName $a
+        $nameMap[$a.id] = Get-AccountDisplayName $a $runMap[$a.id]
     }
     $runCount = @($runMap.Values | Where-Object { $_ }).Count
     $anyRunning = $runCount -gt 0

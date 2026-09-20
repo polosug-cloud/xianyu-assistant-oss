@@ -21,6 +21,9 @@ WEB_USER = os.environ.get("XY_WEB_USER", "admin")
 WEB_PASS = os.environ.get("XY_WEB_PASS", "")       # 空则随机生成并打印一次
 HOST = os.environ.get("XY_HOST", "127.0.0.1")
 PORT = int(os.environ.get("XY_PORT", "8080"))
+# 账号身份标识（托盘启动实例时注入）：用于多实例/多副本环境下识别"该实例属于哪个账号"。
+# 纯 ASCII，避免中文路径经由接口传输时的编码差异导致识别失败。
+ACCOUNT_ID = os.environ.get("XY_ACCOUNT_ID", "")
 
 # 提示音文件（sys=系统提示音·自检异常时响；msg=消息提示音·收到买家消息时响）。
 # 默认读取本仓库 sounds/ 目录下的同名文件；可用环境变量 XY_SOUND_SYS / XY_SOUND_MSG 覆盖。

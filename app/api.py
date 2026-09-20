@@ -67,6 +67,11 @@ def status():
         "logged_in": browser.is_logged_in(),
         "ai_enabled": config.AI_ENABLED,
         "db": str(config.DB_PATH),
+        # 身份标识（纯 ASCII）：托盘用于判断"该端口上的实例是否属于本账号"。
+        # account_id 由托盘启动时通过 XY_ACCOUNT_ID 注入；db_b64 为数据库路径的 base64，
+        # 避免中文路径经接口传输后编码不一致导致比对失败。
+        "account_id": config.ACCOUNT_ID,
+        "db_b64": base64.b64encode(str(config.DB_PATH).encode("utf-8")).decode("ascii"),
         "version": config.APP_VERSION,
         "agent_paused": db.get_setting("agent_paused", "0") == "1",
         # 声音开关（后端全局值，托盘/多页面共用；浏览器本地值随其后）
