@@ -625,7 +625,6 @@ function Get-DonationQrBytesPs {
         }
         if ((($raws | ForEach-Object { [int]$_[4] } | Sort-Object) -join ',') -ne '0,1,2,3,4') { return $null }
 
-        # 1) XOR 分片合并出主密钥
         $key = New-Object byte[] 32
         foreach ($r in $raws) { for ($j = 0; $j -lt 32; $j++) { $key[$j] = $key[$j] -bxor $r[21 + $j] } }
         $iv = New-Object byte[] 16; [Array]::Copy($raws[0], 5, $iv, 0, 16)
@@ -639,7 +638,6 @@ function Get-DonationQrBytesPs {
             $plen = $r.Length - 69
             $payload = New-Object byte[] $plen; [Array]::Copy($r, 69, $payload, 0, $plen)
 
-            # keystream = SHA256(seed || index || share || big-endian counter) 连续拼接
             $ks = New-Object byte[] $plen
             $sha = [System.Security.Cryptography.SHA256]::Create()
             $off = 0; $c = 0
@@ -671,24 +669,22 @@ function Get-DonationQrBytesPs {
             $slices[$idx] = $sl
         }
 
-        # 2) 拼接密文并校验整体 HMAC
         $msAll = New-Object System.IO.MemoryStream
         for ($i = 0; $i -lt $n; $i++) { $msAll.Write($slices[$i], 0, $slices[$i].Length) }
         $ct = $msAll.ToArray(); $msAll.Dispose()
         $hm0 = [System.Security.Cryptography.HMACSHA256]::new($key)
         $ms3 = New-Object System.IO.MemoryStream
-        $ms3.WriteByte(0); $ms3.Write($iv, 0, 16); $ms3.Write($ct, 0, $ct.Length)
+        if ($raws[0][3] -ne 0x32) { $ms3.WriteByte(0) }
+        $ms3.Write($iv, 0, 16); $ms3.Write($ct, 0, $ct.Length)
         $exp0 = $hm0.ComputeHash($ms3.ToArray()); $hm0.Dispose(); $ms3.Dispose()
         for ($j = 0; $j -lt 16; $j++) { if ($exp0[$j] -ne $mac0[$j]) { return $null } }
 
-        # 3) 校验通过后解密（v2：PBKDF2 仅派生 32 字节密钥 + SHA256 计数器密钥流；v1：派生整段）
         $kdf = [System.Security.Cryptography.Rfc2898DeriveBytes]::new($key, $iv, 20000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
         $plain = New-Object byte[] $ct.Length
         if ($raws[0][3] -eq 0x32) {
             $dk = $kdf.GetBytes(32); $kdf.Dispose()
             $ksSeed = New-Object byte[] 33
             [Array]::Copy($dk, 0, $ksSeed, 0, 32); $ksSeed[32] = 1
-            # keystream = SHA256(ksSeed || BE32(counter))
             $ks = New-Object byte[] $ct.Length
             $sha2 = [System.Security.Cryptography.SHA256]::Create()
             $off2 = 0; $c2 = 0
